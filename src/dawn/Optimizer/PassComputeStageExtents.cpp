@@ -20,9 +20,8 @@
 
 namespace dawn {
 
-PassComputeStageExtents::PassComputeStageExtents() : Pass("PassComputeStageExtents") {
+PassComputeStageExtents::PassComputeStageExtents() : Pass("PassComputeStageExtents", true) {
   dependencies_.push_back("PassSetStageName");
-  isDebug_ = true;
 }
 
 bool PassComputeStageExtents::run(
@@ -42,13 +41,6 @@ bool PassComputeStageExtents::run(
       for(const Field& fromField : fromStage.getFields()) {
 
         auto&& fromFieldExtents = fromField.getExtents();
-
-        // notice that IO (if read happens before write) would also be a valid pattern
-        // to trigger the propagation of the stage extents, however this is not a legal
-        // pattern within a stage if the extent is not pointwise
-        if(fromFieldExtents.isPointwise() || fromField.getIntend() != Field::IntendKind::IK_Input)
-          continue;
-
         Extents fieldExtent = fromFieldExtents;
 
         fieldExtent.expand(stageExtent);

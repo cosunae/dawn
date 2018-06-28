@@ -47,10 +47,14 @@ class Stencil {
   std::list<std::shared_ptr<MultiStage>> multistages_;
 
 public:
+  // FieldInfo desribes the properties of a given Field
+  // The dimensions is an array of numberes in x,y and z describing if the field is allowed to have
+  // extens in this dimension: [1,0,0] is a storage_i and cannot be accessed with field[j+1]
   struct FieldInfo {
     bool IsTemporary;
     std::string Name;
     int AccessID;
+    Array3i Dimensions;
   };
 
   /// @brief Position of a stage
@@ -262,6 +266,9 @@ public:
 
   /// @brief Convert stencil to string (i.e print the list of multi-stage -> stages)
   friend std::ostream& operator<<(std::ostream& os, const Stencil& stencil);
+
+  /// @brief Method to compute and return the maximum extents for all the used accessors/fields
+  std::unordered_map<int, Extents> const computeEnclosingAccessExtents() const;
 
 private:
   void forEachStatementAccessesPairImpl(
