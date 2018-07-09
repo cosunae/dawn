@@ -17,6 +17,7 @@
 #include "dawn/Optimizer/DependencyGraphAccesses.h"
 #include "dawn/Optimizer/StatementAccessesPair.h"
 #include "dawn/SIR/Statement.h"
+#include <boost/optional.hpp>
 #include "dawn/Support/IndexGenerator.h"
 
 namespace dawn {
@@ -71,7 +72,7 @@ DoMethod::computeEnclosingAccessInterval(const int accessID, const bool mergeWit
   if(extents.is_initialized()) {
     if(mergeWithDoInterval)
       extents->addCenter(2);
-    return boost::make_optional<Interval>(getInterval())->extendInterval(*extents);
+    return boost::make_optional(getInterval())->extendInterval(*extents);
   }
   return interval;
 }

@@ -23,7 +23,7 @@ namespace codegen {
 namespace gt {
 
 ASTStencilDesc::ASTStencilDesc(
-    const StencilInstantiation* instantiation,
+    const std::shared_ptr<StencilInstantiation> instantiation,
     const std::unordered_map<int, std::vector<std::string>>& StencilIDToStencilNameMap,
     const std::unordered_map<int, std::string>& stencilIdToArguments)
     : ASTCodeGenCXX(), instantiation_(instantiation),
@@ -62,8 +62,7 @@ void ASTStencilDesc::visit(const std::shared_ptr<StencilCallDeclStmt>& stmt) {
   int StencilID = instantiation_->getStencilCallToStencilIDMap().find(stmt)->second;
 
   for(const std::string& stencilName : StencilIDToStencilNameMap_.find(StencilID)->second) {
-    ss_ << std::string(indent_, ' ') << stencilName
-        << "(" + stencilIdToArguments_.at(StencilID) + ");\n";
+    ss_ << std::string(indent_, ' ') << stencilName << ".get_stencil().run();\n";
   }
 }
 
