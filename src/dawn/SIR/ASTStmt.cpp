@@ -44,6 +44,9 @@ BlockStmt& BlockStmt::operator=(BlockStmt const& stmt) {
 BlockStmt::~BlockStmt() {}
 
 std::shared_ptr<Stmt> BlockStmt::clone() const { return std::make_shared<BlockStmt>(*this); }
+std::shared_ptr<Stmt> BlockStmt::shallowClone() const {
+  return std::make_shared<BlockStmt>(statements_, loc_);
+}
 
 bool BlockStmt::equals(const Stmt* other) const {
   const BlockStmt* otherPtr = dyn_cast<BlockStmt>(other);
@@ -58,6 +61,11 @@ void BlockStmt::replaceChildren(std::shared_ptr<Stmt> const& oldStmt,
                                 std::shared_ptr<Stmt> const& newStmt) {
   bool success = ASTHelper::replaceOperands(oldStmt, newStmt, statements_);
   DAWN_ASSERT_MSG((success), ("Expression not found"));
+}
+
+void BlockStmt::replaceChildren(int pos, std::shared_ptr<Stmt> const& newStmt) {
+  DAWN_ASSERT(pos < statements_.size());
+  statements_[pos] = newStmt;
 }
 
 //===------------------------------------------------------------------------------------------===//
@@ -79,6 +87,9 @@ ExprStmt& ExprStmt::operator=(ExprStmt stmt) {
 ExprStmt::~ExprStmt() {}
 
 std::shared_ptr<Stmt> ExprStmt::clone() const { return std::make_shared<ExprStmt>(*this); }
+std::shared_ptr<Stmt> ExprStmt::shallowClone() const {
+  return std::make_shared<ExprStmt>(expr_, loc_);
+}
 
 bool ExprStmt::equals(const Stmt* other) const {
   const ExprStmt* otherPtr = dyn_cast<ExprStmt>(other);
@@ -89,6 +100,11 @@ void ExprStmt::replaceChildren(std::shared_ptr<Expr> const& oldExpr,
                                std::shared_ptr<Expr> const& newExpr) {
   DAWN_ASSERT_MSG((oldExpr == expr_ && oldExpr && newExpr), ("Expression not found"));
 
+  expr_ = newExpr;
+}
+
+void ExprStmt::replaceChildren(int pos, std::shared_ptr<Expr> const& newExpr) {
+  DAWN_ASSERT(pos == 0);
   expr_ = newExpr;
 }
 
@@ -111,6 +127,9 @@ ReturnStmt& ReturnStmt::operator=(ReturnStmt stmt) {
 ReturnStmt::~ReturnStmt() {}
 
 std::shared_ptr<Stmt> ReturnStmt::clone() const { return std::make_shared<ReturnStmt>(*this); }
+std::shared_ptr<Stmt> ReturnStmt::shallowClone() const {
+  return std::make_shared<ReturnStmt>(expr_, loc_);
+}
 
 bool ReturnStmt::equals(const Stmt* other) const {
   const ReturnStmt* otherPtr = dyn_cast<ReturnStmt>(other);
@@ -120,6 +139,11 @@ bool ReturnStmt::equals(const Stmt* other) const {
 void ReturnStmt::replaceChildren(std::shared_ptr<Expr> const& oldExpr,
                                  std::shared_ptr<Expr> const& newExpr) {
   DAWN_ASSERT_MSG((oldExpr == expr_), ("Expression not found"));
+  expr_ = newExpr;
+}
+
+void ReturnStmt::replaceChildren(int pos, std::shared_ptr<Expr> const& newExpr) {
+  DAWN_ASSERT(pos == 0);
   expr_ = newExpr;
 }
 
@@ -152,6 +176,9 @@ VarDeclStmt& VarDeclStmt::operator=(VarDeclStmt stmt) {
 VarDeclStmt::~VarDeclStmt() {}
 
 std::shared_ptr<Stmt> VarDeclStmt::clone() const { return std::make_shared<VarDeclStmt>(*this); }
+std::shared_ptr<Stmt> VarDeclStmt::shallowClone() const {
+  return std::make_shared<VarDeclStmt>(type_, name_, dimension_, op_.c_str(), initList_, loc_);
+}
 
 bool VarDeclStmt::equals(const Stmt* other) const {
   const VarDeclStmt* otherPtr = dyn_cast<VarDeclStmt>(other);
@@ -168,6 +195,11 @@ void VarDeclStmt::replaceChildren(std::shared_ptr<Expr> const& oldExpr,
                                   std::shared_ptr<Expr> const& newExpr) {
   bool success = ASTHelper::replaceOperands(oldExpr, newExpr, initList_);
   DAWN_ASSERT_MSG((success), ("Expression not found"));
+}
+
+void VarDeclStmt::replaceChildren(int pos, std::shared_ptr<Expr> const& newExpr) {
+  DAWN_ASSERT(pos < initList_.size());
+  initList_[pos] = newExpr;
 }
 
 //===------------------------------------------------------------------------------------------===//
@@ -192,6 +224,9 @@ VerticalRegionDeclStmt::~VerticalRegionDeclStmt() {}
 
 std::shared_ptr<Stmt> VerticalRegionDeclStmt::clone() const {
   return std::make_shared<VerticalRegionDeclStmt>(*this);
+}
+std::shared_ptr<Stmt> VerticalRegionDeclStmt::shallowClone() const {
+  return std::make_shared<VerticalRegionDeclStmt>(verticalRegion_, loc_);
 }
 
 bool VerticalRegionDeclStmt::equals(const Stmt* other) const {
@@ -223,6 +258,9 @@ StencilCallDeclStmt::~StencilCallDeclStmt() {}
 std::shared_ptr<Stmt> StencilCallDeclStmt::clone() const {
   return std::make_shared<StencilCallDeclStmt>(*this);
 }
+std::shared_ptr<Stmt> StencilCallDeclStmt::shallowClone() const {
+  return std::make_shared<StencilCallDeclStmt>(stencilCall_, loc_);
+}
 
 bool StencilCallDeclStmt::equals(const Stmt* other) const {
   const StencilCallDeclStmt* otherPtr = dyn_cast<StencilCallDeclStmt>(other);
@@ -252,6 +290,9 @@ BoundaryConditionDeclStmt::~BoundaryConditionDeclStmt() {}
 
 std::shared_ptr<Stmt> BoundaryConditionDeclStmt::clone() const {
   return std::make_shared<BoundaryConditionDeclStmt>(*this);
+}
+std::shared_ptr<Stmt> BoundaryConditionDeclStmt::shallowClone() const {
+  return std::make_shared<BoundaryConditionDeclStmt>(functor_, loc_);
 }
 
 bool BoundaryConditionDeclStmt::equals(const Stmt* other) const {
@@ -288,6 +329,9 @@ IfStmt& IfStmt::operator=(IfStmt stmt) {
 IfStmt::~IfStmt() {}
 
 std::shared_ptr<Stmt> IfStmt::clone() const { return std::make_shared<IfStmt>(*this); }
+std::shared_ptr<Stmt> IfStmt::shallowClone() const {
+  return std::make_shared<IfStmt>(subStmts_[OK_Cond], subStmts_[OK_Then], subStmts_[OK_Else], loc_);
+}
 
 bool IfStmt::equals(const Stmt* other) const {
   const IfStmt* otherPtr = dyn_cast<IfStmt>(other);
@@ -314,6 +358,11 @@ void IfStmt::replaceChildren(std::shared_ptr<Stmt> const& oldStmt,
     return;
   }
   DAWN_ASSERT_MSG((false), ("Expression not found"));
+}
+
+void IfStmt::replaceChildren(int pos, std::shared_ptr<Stmt> const& newStmt) {
+  DAWN_ASSERT((hasElse() && pos < OK_End) || (pos < OK_End - 1));
+  subStmts_[pos] = newStmt;
 }
 
 } // namespace dawn

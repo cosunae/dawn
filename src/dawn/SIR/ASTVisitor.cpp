@@ -25,6 +25,7 @@ ASTVisitorForwarding::~ASTVisitorForwarding() {}
 ASTVisitorForwardingNonConst::~ASTVisitorForwardingNonConst() {}
 ASTVisitorDisabled::~ASTVisitorDisabled() {}
 ASTVisitorPostOrder::~ASTVisitorPostOrder() {}
+ASTVisitorInOrder::~ASTVisitorInOrder() {}
 
 #define ASTVISITORFORWARDING_VISIT_IMPL(Type)                                                      \
   void ASTVisitorForwarding::visit(const std::shared_ptr<Type>& node) {                            \
@@ -215,6 +216,116 @@ std::shared_ptr<Stmt>
 ASTVisitorPostOrder::postVisitNode(std::shared_ptr<dawn::VerticalRegionDeclStmt> const& stmt) {
   return stmt;
 }
+
+#define ASTVISITORINORDER_VISIT_IMPL(NodeType, Type)                                               \
+  std::shared_ptr<NodeType> ASTVisitorInOrder::visitAndReplace(                                    \
+      std::shared_ptr<Type> const& node) {                                                         \
+    auto clone = std::static_pointer_cast<Type>(visitNode(node));                                  \
+    int pos = 0;                                                                                   \
+    for(auto s : node->getChildren()) {                                                            \
+      auto repl = s->acceptAndReplace(*this);                                                      \
+      if(repl && repl != s) {                                                                      \
+        clone->replaceChildren(pos, repl);                                                         \
+      }                                                                                            \
+      pos++;                                                                                       \
+    }                                                                                              \
+    postVisitNode(clone);                                                                          \
+    return clone;                                                                                  \
+  }                                                                                                \
+  std::shared_ptr<NodeType> ASTVisitorInOrder::visitNode(std::shared_ptr<Type> const& node) {      \
+    return node;                                                                                   \
+  }                                                                                                \
+  void ASTVisitorInOrder::postVisitNode(std::shared_ptr<Type> const& node) {}
+
+ASTVISITORINORDER_VISIT_IMPL(Stmt, BlockStmt)
+ASTVISITORINORDER_VISIT_IMPL(Stmt, StencilCallDeclStmt)
+ASTVISITORINORDER_VISIT_IMPL(Stmt, BoundaryConditionDeclStmt)
+ASTVISITORINORDER_VISIT_IMPL(Stmt, IfStmt)
+ASTVISITORINORDER_VISIT_IMPL(Expr, UnaryOperator)
+ASTVISITORINORDER_VISIT_IMPL(Expr, BinaryOperator)
+ASTVISITORINORDER_VISIT_IMPL(Expr, AssignmentExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, TernaryOperator)
+ASTVISITORINORDER_VISIT_IMPL(Expr, FunCallExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, StencilFunCallExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, StencilFunArgExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, VarAccessExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, FieldAccessExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, LiteralAccessExpr)
+ASTVISITORINORDER_VISIT_IMPL(Expr, NOPExpr)
+
+#undef ASTVISITORINORDER_VISIT_STMT_IMPL
+#undef ASTVISITORINORDER_VISIT_EXPR_IMPL
+
+std::shared_ptr<Stmt> ASTVisitorInOrder::visitAndReplace(std::shared_ptr<ExprStmt> const& node) {
+  DAWN_ASSERT(node);
+  auto clone = std::static_pointer_cast<ExprStmt>(visitNode(node));
+
+  DAWN_ASSERT(node->getExpr());
+  auto repl = node->getExpr()->acceptAndReplace(*this);
+  DAWN_ASSERT(repl);
+
+  if(repl && repl != node->getExpr()) {
+    auto oo = node->getExpr();
+    DAWN_ASSERT(oo && repl);
+    clone->replaceChildren(0, repl);
+  }
+  postVisitNode(clone);
+  return clone;
+}
+std::shared_ptr<Stmt> ASTVisitorInOrder::visitNode(std::shared_ptr<ExprStmt> const& node) {
+  return node;
+}
+void ASTVisitorInOrder::postVisitNode(std::shared_ptr<ExprStmt> const& node) {}
+
+std::shared_ptr<Stmt> ASTVisitorInOrder::visitAndReplace(std::shared_ptr<ReturnStmt> const& node) {
+  auto clone = std::static_pointer_cast<ReturnStmt>(visitNode(node));
+  auto repl = node->getExpr()->acceptAndReplace(*this);
+  if(repl && repl != node->getExpr())
+    clone->replaceChildren(0, repl);
+  postVisitNode(clone);
+  return clone;
+}
+std::shared_ptr<Stmt> ASTVisitorInOrder::visitNode(std::shared_ptr<ReturnStmt> const& node) {
+  return node;
+}
+void ASTVisitorInOrder::postVisitNode(std::shared_ptr<ReturnStmt> const& node) {}
+
+std::shared_ptr<Stmt> ASTVisitorInOrder::visitAndReplace(std::shared_ptr<VarDeclStmt> const& node) {
+  auto clone = std::static_pointer_cast<VarDeclStmt>(visitNode(node));
+
+  int pos = 0;
+  for(auto expr : node->getInitList()) {
+    auto repl = expr->acceptAndReplace(*this);
+    if(repl && repl != expr)
+      clone->replaceChildren(pos, repl);
+    pos++;
+  }
+  postVisitNode(clone);
+  return clone;
+}
+
+void ASTVisitorInOrder::postVisitNode(std::shared_ptr<VarDeclStmt> const& node) {}
+std::shared_ptr<Stmt> ASTVisitorInOrder::visitNode(std::shared_ptr<VarDeclStmt> const& node) {
+  return node;
+}
+
+std::shared_ptr<Stmt>
+ASTVisitorInOrder::visitAndReplace(std::shared_ptr<dawn::VerticalRegionDeclStmt> const& stmt) {
+  auto clone = std::static_pointer_cast<VerticalRegionDeclStmt>(visitNode(stmt));
+
+  auto repl = stmt->getVerticalRegion()->Ast->acceptAndReplace(*this);
+  if(repl && repl != stmt->getVerticalRegion()->Ast)
+    clone->getVerticalRegion()->Ast = repl;
+  postVisitNode(clone);
+  return clone;
+}
+
+std::shared_ptr<Stmt>
+ASTVisitorInOrder::visitNode(std::shared_ptr<dawn::VerticalRegionDeclStmt> const& stmt) {
+  return stmt;
+}
+
+void ASTVisitorInOrder::postVisitNode(std::shared_ptr<dawn::VerticalRegionDeclStmt> const& stmt) {}
 
 #define ASTVISITORDISABLED_VISIT_IMPL(Type)                                                        \
   void ASTVisitorDisabled::visit(const std::shared_ptr<Type>& node) {                              \

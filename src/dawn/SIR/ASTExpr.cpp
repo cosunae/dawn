@@ -45,6 +45,9 @@ UnaryOperator::~UnaryOperator() {}
 std::shared_ptr<Expr> UnaryOperator::clone() const {
   return std::make_shared<UnaryOperator>(*this);
 }
+std::shared_ptr<Expr> UnaryOperator::shallowClone() const {
+  return std::make_shared<UnaryOperator>(operand_, op_, loc_);
+}
 
 bool UnaryOperator::equals(const Expr* other) const {
   const UnaryOperator* otherPtr = dyn_cast<UnaryOperator>(other);
@@ -55,6 +58,11 @@ bool UnaryOperator::equals(const Expr* other) const {
 void UnaryOperator::replaceChildren(const std::shared_ptr<Expr>& oldExpr,
                                     const std::shared_ptr<Expr>& newExpr) {
   DAWN_ASSERT(oldExpr == operand_);
+  operand_ = newExpr;
+}
+
+void UnaryOperator::replaceChildren(int pos, const std::shared_ptr<Expr>& newExpr) {
+  DAWN_ASSERT(pos == 0);
   operand_ = newExpr;
 }
 
@@ -83,6 +91,9 @@ BinaryOperator::~BinaryOperator() {}
 std::shared_ptr<Expr> BinaryOperator::clone() const {
   return std::make_shared<BinaryOperator>(*this);
 }
+std::shared_ptr<Expr> BinaryOperator::shallowClone() const {
+  return std::make_shared<BinaryOperator>(operands_[OK_Left], op_, operands_[OK_Right], loc_);
+}
 
 bool BinaryOperator::equals(const Expr* other) const {
   const BinaryOperator* otherPtr = dyn_cast<BinaryOperator>(other);
@@ -95,6 +106,10 @@ void BinaryOperator::replaceChildren(const std::shared_ptr<Expr>& oldExpr,
                                      const std::shared_ptr<Expr>& newExpr) {
   bool success = ASTHelper::replaceOperands(oldExpr, newExpr, operands_);
   DAWN_ASSERT_MSG((success), ("Expression not found"));
+}
+void BinaryOperator::replaceChildren(int pos, const std::shared_ptr<Expr>& newExpr) {
+  DAWN_ASSERT(pos < operands_.size());
+  operands_[pos] = newExpr;
 }
 
 //===------------------------------------------------------------------------------------------===//
@@ -127,6 +142,9 @@ AssignmentExpr::~AssignmentExpr() {}
 std::shared_ptr<Expr> AssignmentExpr::clone() const {
   return std::make_shared<AssignmentExpr>(*this);
 }
+std::shared_ptr<Expr> AssignmentExpr::shallowClone() const {
+  return std::make_shared<AssignmentExpr>(operands_[OK_Left], operands_[OK_Right], op_, loc_);
+}
 
 bool AssignmentExpr::equals(const Expr* other) const {
   const AssignmentExpr* otherPtr = dyn_cast<AssignmentExpr>(other);
@@ -153,6 +171,7 @@ NOPExpr& NOPExpr::operator=(NOPExpr expr) {
 NOPExpr::~NOPExpr() {}
 
 std::shared_ptr<Expr> NOPExpr::clone() const { return std::make_shared<NOPExpr>(*this); }
+std::shared_ptr<Expr> NOPExpr::shallowClone() const { return std::make_shared<NOPExpr>(loc_); }
 
 bool NOPExpr::equals(const Expr* other) const { return true; }
 
@@ -182,6 +201,10 @@ TernaryOperator::~TernaryOperator() {}
 std::shared_ptr<Expr> TernaryOperator::clone() const {
   return std::make_shared<TernaryOperator>(*this);
 }
+std::shared_ptr<Expr> TernaryOperator::shallowClone() const {
+  return std::make_shared<TernaryOperator>(operands_[OK_Cond], operands_[OK_Left],
+                                           operands_[OK_Right], loc_);
+}
 
 bool TernaryOperator::equals(const Expr* other) const {
   const TernaryOperator* otherPtr = dyn_cast<TernaryOperator>(other);
@@ -195,6 +218,11 @@ void TernaryOperator::replaceChildren(const std::shared_ptr<Expr>& oldExpr,
                                       const std::shared_ptr<Expr>& newExpr) {
   bool success = ASTHelper::replaceOperands(oldExpr, newExpr, operands_);
   DAWN_ASSERT_MSG((success), ("Expression not found"));
+}
+
+void TernaryOperator::replaceChildren(int pos, const std::shared_ptr<Expr>& newExpr) {
+  DAWN_ASSERT(pos < operands_.size());
+  operands_[pos] = newExpr;
 }
 
 //===------------------------------------------------------------------------------------------===//
@@ -220,6 +248,13 @@ FunCallExpr& FunCallExpr::operator=(FunCallExpr expr) {
 FunCallExpr::~FunCallExpr() {}
 
 std::shared_ptr<Expr> FunCallExpr::clone() const { return std::make_shared<FunCallExpr>(*this); }
+std::shared_ptr<Expr> FunCallExpr::shallowClone() const {
+  auto cl = std::make_shared<FunCallExpr>(callee_, loc_);
+  for(auto e : getArguments()) {
+    cl->insertArgument(e);
+  }
+  return cl;
+}
 
 bool FunCallExpr::equals(const Expr* other) const {
   const FunCallExpr* otherPtr = dyn_cast<FunCallExpr>(other);
@@ -237,6 +272,10 @@ void FunCallExpr::replaceChildren(const std::shared_ptr<Expr>& oldExpr,
                                   const std::shared_ptr<Expr>& newExpr) {
   bool success = ASTHelper::replaceOperands(oldExpr, newExpr, arguments_);
   DAWN_ASSERT_MSG((success), ("Expression not found"));
+}
+void FunCallExpr::replaceChildren(int pos, const std::shared_ptr<Expr>& newExpr) {
+  DAWN_ASSERT(pos < arguments_.size());
+  arguments_[pos] = newExpr;
 }
 
 //===------------------------------------------------------------------------------------------===//
@@ -266,6 +305,14 @@ StencilFunCallExpr::~StencilFunCallExpr() {}
 
 std::shared_ptr<Expr> StencilFunCallExpr::clone() const {
   return std::make_shared<StencilFunCallExpr>(*this);
+}
+std::shared_ptr<Expr> StencilFunCallExpr::shallowClone() const {
+  auto cl = std::make_shared<StencilFunCallExpr>(callee_, loc_);
+
+  for(auto e : getArguments()) {
+    cl->insertArgument(e);
+  }
+  return cl;
 }
 
 bool StencilFunCallExpr::equals(const Expr* other) const {
@@ -304,6 +351,9 @@ StencilFunArgExpr::~StencilFunArgExpr() {}
 std::shared_ptr<Expr> StencilFunArgExpr::clone() const {
   return std::make_shared<StencilFunArgExpr>(*this);
 }
+std::shared_ptr<Expr> StencilFunArgExpr::shallowClone() const {
+  return std::make_shared<StencilFunArgExpr>(dimension_, offset_, argumentIndex_, loc_);
+}
 
 bool StencilFunArgExpr::equals(const Expr* other) const {
   const StencilFunArgExpr* otherPtr = dyn_cast<StencilFunArgExpr>(other);
@@ -336,6 +386,11 @@ VarAccessExpr::~VarAccessExpr() {}
 std::shared_ptr<Expr> VarAccessExpr::clone() const {
   return std::make_shared<VarAccessExpr>(*this);
 }
+std::shared_ptr<Expr> VarAccessExpr::shallowClone() const {
+  auto cl = std::make_shared<VarAccessExpr>(name_, index_, loc_);
+  cl->setIsExternal(isExternal_);
+  return cl;
+}
 
 bool VarAccessExpr::equals(const Expr* other) const {
   const VarAccessExpr* otherPtr = dyn_cast<VarAccessExpr>(other);
@@ -354,10 +409,16 @@ void VarAccessExpr::replaceChildren(const std::shared_ptr<Expr>& oldExpr,
   }
 }
 
+void VarAccessExpr::replaceChildren(int pos, const std::shared_ptr<Expr>& newExpr) {
+  DAWN_ASSERT(isArrayAccess() && pos == 0);
+  index_ = newExpr;
+}
+
 //===------------------------------------------------------------------------------------------===//
 //     FieldAccessExpr
 //===------------------------------------------------------------------------------------------===//
 
+// TODO we can not move here, is not move semantic
 FieldAccessExpr::FieldAccessExpr(const std::string& name, Array3i offset, Array3i argumentMap,
                                  Array3i argumentOffset, bool negateOffset, SourceLocation loc)
     : Expr(EK_FieldAccessExpr, loc), name_(name), offset_(std::move(offset)),
@@ -390,6 +451,10 @@ void FieldAccessExpr::setPureOffset(const Array3i& offset) {
 std::shared_ptr<Expr> FieldAccessExpr::clone() const {
   return std::make_shared<FieldAccessExpr>(*this);
 }
+std::shared_ptr<Expr> FieldAccessExpr::shallowClone() const {
+  return std::make_shared<FieldAccessExpr>(name_, offset_, argumentMap_, argumentOffset_,
+                                           negateOffset_, loc_);
+}
 
 bool FieldAccessExpr::equals(const Expr* other) const {
   const FieldAccessExpr* otherPtr = dyn_cast<FieldAccessExpr>(other);
@@ -421,6 +486,9 @@ LiteralAccessExpr::~LiteralAccessExpr() {}
 
 std::shared_ptr<Expr> LiteralAccessExpr::clone() const {
   return std::make_shared<LiteralAccessExpr>(*this);
+}
+std::shared_ptr<Expr> LiteralAccessExpr::shallowClone() const {
+  return std::make_shared<LiteralAccessExpr>(value_, builtinType_, loc_);
 }
 
 bool LiteralAccessExpr::equals(const Expr* other) const {

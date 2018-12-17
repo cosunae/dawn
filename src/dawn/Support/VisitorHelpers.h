@@ -25,6 +25,9 @@
   virtual inline std::shared_ptr<subtype> acceptAndReplace(ASTVisitorPostOrder& visitor)           \
       override {                                                                                   \
     return visitor.visitAndReplace(std::static_pointer_cast<type>(shared_from_this()));            \
+  }                                                                                                \
+  virtual inline std::shared_ptr<subtype> acceptAndReplace(ASTVisitorInOrder& visitor) override {  \
+    return visitor.visitAndReplace(std::static_pointer_cast<type>(shared_from_this()));            \
   }
 
 #endif

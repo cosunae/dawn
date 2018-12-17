@@ -54,6 +54,7 @@ public:
   void accept(ASTVisitor& visitor) const;
   void accept(ASTVisitorNonConst& visitor) const;
   std::shared_ptr<AST> acceptAndReplace(ASTVisitorPostOrder& visitor) const;
+  std::shared_ptr<AST> acceptAndReplace(ASTVisitorInOrder& visitor) const;
 
   /// @brief Get root node
   const std::shared_ptr<BlockStmt>& getRoot() const;
