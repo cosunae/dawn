@@ -44,6 +44,7 @@ protected:
   const std::unique_ptr<iir::MultiStage>& ms_;
   const CacheProperties& cacheProperties_;
   const Array3ui blockSizes_;
+  std::string suf_;
 
 public:
   using Base = ASTCodeGenCXX;
@@ -55,6 +56,8 @@ public:
                  Array3ui blockSizes);
 
   virtual ~ASTStencilBody() override;
+
+  void setFieldSuffix(std::string suf);
 
   /// @name Statement implementation
   /// @{

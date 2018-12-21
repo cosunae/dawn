@@ -122,7 +122,7 @@ iir::Extents CodeGeneratorHelper::computeTempMaxWriteExtent(iir::Stencil const& 
 void CodeGeneratorHelper::generateFieldAccessDeref(
     std::stringstream& ss, const std::unique_ptr<iir::MultiStage>& ms,
     const std::shared_ptr<iir::StencilInstantiation>& instantiation, const int accessID,
-    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset) {
+    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset, const std::string suf) {
   std::string accessName = instantiation->getNameFromAccessID(accessID);
   bool isTemporary = instantiation->isTemporaryField(accessID);
   DAWN_ASSERT(fieldIndexMap.count(accessID) || isTemporary);
@@ -137,7 +137,7 @@ void CodeGeneratorHelper::generateFieldAccessDeref(
   std::string offsetStr = RangeToString("+", "", "", true)(
       CodeGeneratorHelper::ijkfyOffset(offset, useTmpIndex_, iter));
   const bool readOnly = (field.getIntend() == iir::Field::IntendKind::IK_Input);
-  ss << (readOnly ? "__ldg(&(" : "") << accessName
+  ss << (readOnly ? "__ldg(&(" : "") << accessName << "." << suf
      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]"))
      << (readOnly ? "))" : "");
 }

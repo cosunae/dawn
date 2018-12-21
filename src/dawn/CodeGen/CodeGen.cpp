@@ -136,6 +136,22 @@ void CodeGen::generateBCHeaders(std::vector<std::string>& ppDefines) const {
   }
 }
 
+void CodeGen::generateDefs(std::vector<std::string>& ppDefines) const {
+  ppDefines.push_back("namespace gridtools {");
+  ppDefines.push_back("namespace clang {");
+  ppDefines.push_back("#if GRIDTOOLS_CLANG_PRECISION == GRIDTOOLS_CLANG_SINGLE_PRECISION");
+  ppDefines.push_back(" #define FLOAT_PRECISION 4");
+  ppDefines.push_back("using float_type2 = float2;");
+  ppDefines.push_back("#elif GRIDTOOLS_CLANG_PRECISION == GRIDTOOLS_CLANG_DOUBLE_PRECISION");
+  ppDefines.push_back("#define FLOAT_PRECISION 8");
+  ppDefines.push_back("using float_type2 = double2;");
+  ppDefines.push_back("#else");
+  ppDefines.push_back("#error GRIDTOOLS_CLANG_PRECISION is invalid");
+  ppDefines.push_back("#endif");
+  ppDefines.push_back("}");
+  ppDefines.push_back("}");
+}
+
 CodeGenProperties
 CodeGen::computeCodeGenProperties(const iir::StencilInstantiation* stencilInstantiation) const {
   CodeGenProperties codeGenProperties;

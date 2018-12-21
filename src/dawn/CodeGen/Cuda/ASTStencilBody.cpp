@@ -115,8 +115,10 @@ void ASTStencilBody::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
   }
 
   CodeGeneratorHelper::generateFieldAccessDeref(ss_, ms_, instantiation_, accessID, fieldIndexMap_,
-                                                expr->getOffset());
+                                                expr->getOffset(), suf_);
 }
+
+void ASTStencilBody::setFieldSuffix(std::string suf) { suf_ = suf; }
 
 void ASTStencilBody::derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr) {
   int accessID = instantiation_->getAccessIDFromExpr(expr);
@@ -126,9 +128,9 @@ void ASTStencilBody::derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr) 
   if(cacheProperties_.isCommonCache(accessID)) {
     index = cacheProperties_.getCommonCacheIndexName(iir::Cache::CacheTypeKind::IJ);
   } else {
-    index = "iblock - " + std::to_string(cacheProperties_.getOffsetBeginIJCache(accessID, 0)) + " (jblock - " +
-            std::to_string(cacheProperties_.getOffsetBeginIJCache(accessID, 1)) + ")*" +
-            std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
+    index = "iblock - " + std::to_string(cacheProperties_.getOffsetBeginIJCache(accessID, 0)) +
+            " (jblock - " + std::to_string(cacheProperties_.getOffsetBeginIJCache(accessID, 1)) +
+            ")*" + std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
   }
   DAWN_ASSERT(expr->getOffset()[2] == 0);
 
