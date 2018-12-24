@@ -369,11 +369,22 @@ void MSCodeGen::generateFillKCaches(MemberFunction& cudaKernel, const iir::Inter
             std::stringstream ss;
             CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_,
                                                           kcacheProp.accessID_, fieldIndexMap,
-                                                          Array3i{0, 0, offset});
+                                                          Array3i{0, 0, offset}, "x");
             cudaKernel.addStatement(
                 kcacheProp.name_ + "[" +
                 std::to_string(cacheProperties_.getKCacheIndex(kcacheProp.accessID_, offset)) +
-                "] =" + ss.str());
+                "].x =" + ss.str());
+
+            ss.clear();
+            ss.str(std::string());
+
+            CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_,
+                                                          kcacheProp.accessID_, fieldIndexMap,
+                                                          Array3i{0, 0, offset}, "y");
+            cudaKernel.addStatement(
+                kcacheProp.name_ + "[" +
+                std::to_string(cacheProperties_.getKCacheIndex(kcacheProp.accessID_, offset)) +
+                "].y =" + ss.str());
           }
         });
   }
