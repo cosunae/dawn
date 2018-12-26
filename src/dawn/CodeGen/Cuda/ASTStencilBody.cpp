@@ -37,6 +37,10 @@ ASTStencilBody::ASTStencilBody(
 
 ASTStencilBody::~ASTStencilBody() {}
 
+std::string ASTStencilBody::getCodeAndResetStream() {
+  activateLocalField_ = false;
+  return ASTCodeGenCXX::getCodeAndResetStream();
+}
 std::string ASTStencilBody::getName(const std::shared_ptr<Expr>& expr) const {
   return instantiation_->getNameFromAccessID(instantiation_->getAccessIDFromExpr(expr));
 }
@@ -48,6 +52,13 @@ std::string ASTStencilBody::getName(const std::shared_ptr<Stmt>& stmt) const {
 //===------------------------------------------------------------------------------------------===//
 //     Stmt
 //===------------------------------------------------------------------------------------------===//
+
+void ASTStencilBody::visit(const std::shared_ptr<AssignmentExpr>& expr) {
+  expr->getLeft()->accept(*this);
+  ss_ << " " << expr->getOp() << " ";
+  activateLocalField_ = true;
+  expr->getRight()->accept(*this);
+}
 
 void ASTStencilBody::visit(const std::shared_ptr<ReturnStmt>& stmt) {
   if(scopeDepth_ == 0)
@@ -83,6 +94,42 @@ void ASTStencilBody::visit(const std::shared_ptr<StencilFunArgExpr>& expr) {
   dawn_unreachable("stencil functions not allows in cuda backend");
 }
 
+void ASTStencilBody::visit(const std::shared_ptr<VarDeclStmt>& stmt) {
+
+  if(scopeDepth_ == 0)
+    ss_ << std::string(indent_, ' ');
+
+  const auto& type = stmt->getType();
+  if(type.isConst())
+    ss_ << "const ";
+  if(type.isVolatile())
+    ss_ << "volatile ";
+
+  if(type.isBuiltinType())
+    ss_ << ASTCodeGenCXX::builtinTypeIDToCXXType(type.getBuiltinTypeID(), true);
+  else
+    ss_ << type.getName();
+  ss_ << " " << getName(stmt) << "_" << suf_;
+
+  if(stmt->isArray())
+    ss_ << "[" << stmt->getDimension() << "]";
+
+  if(stmt->hasInit()) {
+    ss_ << " " << stmt->getOp() << " ";
+    if(!stmt->isArray())
+      stmt->getInitList().front()->accept(*this);
+    else {
+      ss_ << "{";
+      int numInit = stmt->getInitList().size();
+      for(int i = 0; i < numInit; ++i) {
+        stmt->getInitList()[i]->accept(*this);
+        ss_ << ((i != (numInit - 1)) ? ", " : "");
+      }
+      ss_ << "}";
+    }
+  }
+  ss_ << ";\n";
+}
 void ASTStencilBody::visit(const std::shared_ptr<VarAccessExpr>& expr) {
   std::string name = getName(expr);
   int accessID = instantiation_->getAccessIDFromExpr(expr);
@@ -90,7 +137,7 @@ void ASTStencilBody::visit(const std::shared_ptr<VarAccessExpr>& expr) {
   if(instantiation_->isGlobalVariable(accessID)) {
     ss_ << "globals_." << name;
   } else {
-    ss_ << name;
+    ss_ << name << "_" << suf_;
 
     if(expr->isArrayAccess()) {
       ss_ << "[";
@@ -111,8 +158,9 @@ void ASTStencilBody::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
     return;
   }
 
-  CodeGeneratorHelper::generateFieldAccessDeref(ss_, ms_, instantiation_, accessID, fieldIndexMap_,
-                                                expr->getOffset(), suf_);
+  CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
+                                                fieldIndexMap_, expr->getOffset(),
+                                                activateLocalField_, suf_);
 }
 
 void ASTStencilBody::setFieldSuffix(std::string suf) { suf_ = suf; }
@@ -139,7 +187,8 @@ void ASTStencilBody::derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr) 
     offsetStr += ((offsetStr != "") ? "+" : "") + std::to_string(offset[1]) + "*" +
                  std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
   ss_ << accessName
-      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]"));
+      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]")) << "."
+      << suf_;
 }
 
 void ASTStencilBody::derefKCache(const std::shared_ptr<FieldAccessExpr>& expr) {
@@ -158,7 +207,53 @@ void ASTStencilBody::derefKCache(const std::shared_ptr<FieldAccessExpr>& expr) {
   auto offset = expr->getOffset();
   if(offset[2] != 0)
     index += offset[2];
-  ss_ << accessName << "[" + std::to_string(index) + "]";
+  ss_ << accessName << "[" + std::to_string(index) + "]." << suf_;
+}
+
+LocalDecler::LocalDecler(const int id, MemberFunction& cudaKernel,
+                         const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
+                         const std::unordered_map<int, Array3i>& fieldIndexMap,
+                         const std::unique_ptr<iir::MultiStage>& ms,
+                         const CacheProperties& cacheProperties, Array3ui blockSizes)
+    : id_(id), cudaKernel_(cudaKernel), instantiation_(stencilInstantiation),
+      fieldIndexMap_(fieldIndexMap), ms_(ms), cacheProperties_(cacheProperties),
+      blockSizes_(blockSizes) {}
+
+LocalDecler::~LocalDecler() {}
+
+void LocalDecler::visit(const std::shared_ptr<AssignmentExpr>& expr) {
+  expr->getLeft()->accept(*this);
+  activateLocalField_ = true;
+  expr->getRight()->accept(*this);
+}
+void LocalDecler::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
+  if(!activateLocalField_) {
+    return;
+  }
+
+  int accessID = instantiation_->getAccessIDFromExpr(expr);
+  if(cacheProperties_.isIJCached(accessID)) {
+    return;
+  }
+  if(cacheProperties_.isKCached(accessID) &&
+     !cacheProperties_.requiresFill(ms_->getCache(accessID))) {
+    return;
+  }
+
+  std::string name =
+      CodeGeneratorHelper::getLocaDerefName(instantiation_, id_, accessID, expr->getOffset());
+
+  if(loaded_.count(name))
+    return;
+
+  std::stringstream ss;
+  CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, instantiation_, accessID, fieldIndexMap_,
+                                               expr->getOffset());
+
+  cudaKernel_.addStatement("gridtools::clang::float_type2 " + name + "=" + ss.str());
+
+  loaded_.insert(name);
+  return;
 }
 
 } // namespace cuda

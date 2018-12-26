@@ -65,8 +65,8 @@ void MSCodeGen::generateIJCacheDecl(MemberFunction& kernel) const {
     const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
 
     kernel.addStatement(
-        "__shared__ gridtools::clang::float_type " + cacheProperties_.getCacheName(accessID) + "[" +
-        std::to_string(blockSize_[0] + (maxExtents[0].Plus - maxExtents[0].Minus)) + "*" +
+        "__shared__ gridtools::clang::float_type2 " + cacheProperties_.getCacheName(accessID) +
+        "[" + std::to_string(blockSize_[0] + (maxExtents[0].Plus - maxExtents[0].Minus)) + "*" +
         std::to_string(blockSize_[1] + (maxExtents[1].Plus - maxExtents[1].Minus)) + "]");
   }
 }
@@ -83,7 +83,7 @@ void MSCodeGen::generateKCacheDecl(MemberFunction& kernel) const {
     const int accessID = cache.getCachedFieldAccessID();
     auto vertExtent = ms_->getKCacheVertExtent(accessID);
 
-    kernel.addStatement("gridtools::clang::float_type " + cacheProperties_.getCacheName(accessID) +
+    kernel.addStatement("gridtools::clang::float_type2 " + cacheProperties_.getCacheName(accessID) +
                         "[" + std::to_string(-vertExtent.Minus + vertExtent.Plus + 1) + "]");
   }
 }
@@ -150,18 +150,13 @@ void MSCodeGen::generateKCacheFillStatement(MemberFunction& cudaKernel,
                                             const std::unordered_map<int, Array3i>& fieldIndexMap,
                                             const KCacheProperties& kcacheProp, int klev) const {
   std::stringstream ss;
-  CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_,
-                                                kcacheProp.accessID_, fieldIndexMap,
-                                                Array3i{0, 0, klev}, "x");
+  CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, stencilInstantiation_, kcacheProp.accessID_,
+                                               fieldIndexMap, Array3i{0, 0, klev});
   cudaKernel.addStatement(kcacheProp.name_ + "[" + std::to_string(cacheProperties_.getKCacheIndex(
                                                        kcacheProp.accessID_, klev)) +
-                          "].x =" + ss.str());
-  CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_,
-                                                kcacheProp.accessID_, fieldIndexMap,
-                                                Array3i{0, 0, klev}, "y");
-  cudaKernel.addStatement(kcacheProp.name_ + "[" + std::to_string(cacheProperties_.getKCacheIndex(
-                                                       kcacheProp.accessID_, klev)) +
-                          "].y =" + ss.str());
+                          "] =" + ss.str());
+  ss.clear();
+  ss.str(std::string());
 }
 
 iir::MultiInterval
@@ -367,24 +362,13 @@ void MSCodeGen::generateFillKCaches(MemberFunction& cudaKernel, const iir::Inter
                              ? kcacheProp.intervalVertExtent_.Minus
                              : kcacheProp.intervalVertExtent_.Plus;
             std::stringstream ss;
-            CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_,
-                                                          kcacheProp.accessID_, fieldIndexMap,
-                                                          Array3i{0, 0, offset}, "x");
+            CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, stencilInstantiation_,
+                                                         kcacheProp.accessID_, fieldIndexMap,
+                                                         Array3i{0, 0, offset});
             cudaKernel.addStatement(
                 kcacheProp.name_ + "[" +
                 std::to_string(cacheProperties_.getKCacheIndex(kcacheProp.accessID_, offset)) +
-                "].x =" + ss.str());
-
-            ss.clear();
-            ss.str(std::string());
-
-            CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_,
-                                                          kcacheProp.accessID_, fieldIndexMap,
-                                                          Array3i{0, 0, offset}, "y");
-            cudaKernel.addStatement(
-                kcacheProp.name_ + "[" +
-                std::to_string(cacheProperties_.getKCacheIndex(kcacheProp.accessID_, offset)) +
-                "].y =" + ss.str());
+                "] =" + ss.str());
           }
         });
   }
@@ -509,15 +493,10 @@ void MSCodeGen::generateKCacheFlushStatement(MemberFunction& cudaKernel,
                                              const int accessID, std::string cacheName,
                                              const int offset) const {
   std::stringstream ss;
-  CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_, accessID,
-                                                fieldIndexMap, Array3i{0, 0, offset}, "x");
+  CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, stencilInstantiation_, accessID,
+                                               fieldIndexMap, Array3i{0, 0, offset});
   cudaKernel.addStatement(ss.str() + "= " + cacheName + "[" +
                           std::to_string(cacheProperties_.getKCacheIndex(accessID, offset)) + "]");
-  CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_, accessID,
-                                                fieldIndexMap, Array3i{0, 0, offset}, "y");
-  cudaKernel.addStatement(ss.str() + "= " + cacheName + "[" +
-                          std::to_string(cacheProperties_.getKCacheIndex(accessID, offset)) +
-                          "].y");
 }
 
 std::string MSCodeGen::kBegin(const std::string dom, iir::LoopOrderKind loopOrder,
@@ -775,7 +754,7 @@ void MSCodeGen::generateCudaKernelCode() {
                         stencilInstantiation_->getNameFromAccessID((*field).second.getAccessID()) +
                         "_dv");
     } else {
-      cudaKernel.addArg("gridtools::clang::float_type * const " +
+      cudaKernel.addArg("gridtools::clang::float_type2 * const " +
                         stencilInstantiation_->getNameFromAccessID((*field).second.getAccessID()));
     }
   }
@@ -1049,9 +1028,18 @@ void MSCodeGen::generateCudaKernelCode() {
                 if(!doMethod.getInterval().overlaps(interval))
                   continue;
                 for(const auto& statementAccessesPair : doMethod.getChildren()) {
+
+                  const int stmtid = stencilInstantiation_->nextUID();
+                  LocalDecler localDecler(stmtid, cudaKernel, stencilInstantiation_, fieldIndexMap,
+                                          ms_, cacheProperties_, blockSize_);
+
+                  statementAccessesPair->getStatement()->ASTStmt->accept(localDecler);
+                  stencilBodyCXXVisitor.setId(stmtid);
                   stencilBodyCXXVisitor.setFieldSuffix("x");
                   statementAccessesPair->getStatement()->ASTStmt->accept(stencilBodyCXXVisitor);
-                  stencilBodyCXXVisitor.setFieldSuffix("x");
+                  cudaKernel << stencilBodyCXXVisitor.getCodeAndResetStream();
+                  stencilBodyCXXVisitor.clear();
+                  stencilBodyCXXVisitor.setFieldSuffix("y");
                   statementAccessesPair->getStatement()->ASTStmt->accept(stencilBodyCXXVisitor);
                   cudaKernel << stencilBodyCXXVisitor.getCodeAndResetStream();
                 }

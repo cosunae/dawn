@@ -36,6 +36,8 @@ protected:
   /// Underlying stream
   std::stringstream ss_;
 
+  std::string suf_;
+
 public:
   ASTCodeGenCXX();
   virtual ~ASTCodeGenCXX();
@@ -66,7 +68,7 @@ public:
   /// @}
 
   /// @brief Get the generated code and reset the internal string stream
-  std::string getCodeAndResetStream();
+  virtual std::string getCodeAndResetStream();
 
   /// @brief Set initial indent of each statement
   void setIndent(int indent);
@@ -79,6 +81,8 @@ public:
 
   /// @brief Convert builtin type to the corresponding C++ type
   static const char* builtinTypeIDToCXXType(const BuiltinTypeID& builtinTypeID, bool isAutoAllowed);
+
+  void clear();
 };
 
 } // namespace codegen

@@ -120,9 +120,38 @@ iir::Extents CodeGeneratorHelper::computeTempMaxWriteExtent(iir::Stencil const& 
 }
 
 void CodeGeneratorHelper::generateFieldAccessDeref(
+    std::stringstream& ss, const int id, const std::unique_ptr<iir::MultiStage>& ms,
+    const std::shared_ptr<iir::StencilInstantiation>& instantiation, const int accessID,
+    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset,
+    const bool activateLocalField, const std::string suf) {
+  std::string accessName = instantiation->getNameFromAccessID(accessID);
+  bool isTemporary = instantiation->isTemporaryField(accessID);
+  DAWN_ASSERT(fieldIndexMap.count(accessID) || isTemporary);
+  const auto& field = ms->getField(accessID);
+  bool useTmpIndex_ = (isTemporary && !useNormalIteratorForTmp(ms));
+  std::string index = useTmpIndex_ ? "idx_tmp" : "idx" + CodeGeneratorHelper::indexIteratorName(
+                                                             fieldIndexMap.at(accessID));
+
+  if(activateLocalField) {
+    ss << CodeGeneratorHelper::getLocaDerefName(instantiation, id, accessID, offset) << "." << suf;
+  } else {
+    // temporaries have all 3 dimensions
+    Array3i iter = isTemporary ? Array3i{1, 1, 1} : fieldIndexMap.at(accessID);
+
+    std::string offsetStr = RangeToString("+", "", "", true)(
+        CodeGeneratorHelper::ijkfyOffset(offset, useTmpIndex_, iter));
+    const bool readOnly = (field.getIntend() == iir::Field::IntendKind::IK_Input);
+    ss << (readOnly ? "__ldg(&(" : "") << accessName
+       << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]")) << "."
+       << suf << (readOnly ? "))" : "");
+  }
+  return;
+}
+
+void CodeGeneratorHelper::generateFieldAccessLoad(
     std::stringstream& ss, const std::unique_ptr<iir::MultiStage>& ms,
     const std::shared_ptr<iir::StencilInstantiation>& instantiation, const int accessID,
-    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset, const std::string suf) {
+    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset) {
   std::string accessName = instantiation->getNameFromAccessID(accessID);
   bool isTemporary = instantiation->isTemporaryField(accessID);
   DAWN_ASSERT(fieldIndexMap.count(accessID) || isTemporary);
@@ -137,11 +166,28 @@ void CodeGeneratorHelper::generateFieldAccessDeref(
   std::string offsetStr = RangeToString("+", "", "", true)(
       CodeGeneratorHelper::ijkfyOffset(offset, useTmpIndex_, iter));
   const bool readOnly = (field.getIntend() == iir::Field::IntendKind::IK_Input);
-  ss << (readOnly ? "__ldg(&(" : "") << accessName << "." << suf
+  ss << (readOnly ? "__ldg(&(" : "") << accessName
      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]"))
      << (readOnly ? "))" : "");
 }
 
+std::string CodeGeneratorHelper::getLocaDerefName(
+    const std::shared_ptr<iir::StencilInstantiation>& instantiation, int id, const int accessID,
+    const Array3i& offset) {
+  std::string name = instantiation->getNameFromAccessID(accessID);
+
+  name = name + "_" + std::to_string(id);
+
+  std::stringstream ss;
+  for(auto offset : offset) {
+    if(offset != 0)
+      ss << (offset > 0 ? "plus_" : "minus_") << std::abs(offset);
+  }
+  std::string offsetStr = ss.str();
+
+  name = name + offsetStr;
+  return name;
+}
 std::array<std::string, 3> CodeGeneratorHelper::ijkfyOffset(const Array3i& offsets,
                                                             bool useTmpIndex,
                                                             const Array3i iteratorDims) {

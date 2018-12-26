@@ -24,6 +24,10 @@ ASTCodeGenCXX::ASTCodeGenCXX() : indent_(0), scopeDepth_(0) {}
 
 ASTCodeGenCXX::~ASTCodeGenCXX() {}
 
+void ASTCodeGenCXX::clear() {
+  ss_.clear();
+  ss_.str(std::string());
+}
 //===------------------------------------------------------------------------------------------===//
 //     Stmt
 //===------------------------------------------------------------------------------------------===//

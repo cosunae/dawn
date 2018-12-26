@@ -556,9 +556,9 @@ void CudaCodeGen::generateStencilRunMethod(
       const auto fieldName =
           stencilInstantiation->getNameFromAccessID((*field).second.getAccessID());
 
-      args = args + (idx == 0 ? "" : ",") + "(" + fieldName + ".data()+" + "m_" + fieldName +
-             ".get_storage_info_ptr()->index(" + fieldName + ".begin<0>(), " + fieldName +
-             ".begin<1>(),0 ))";
+      args = args + (idx == 0 ? "" : ",") + "(gridtools::clang::float_type2*)(" + fieldName +
+             ".data()+" + "m_" + fieldName + ".get_storage_info_ptr()->index(" + fieldName +
+             ".begin<0>(), " + fieldName + ".begin<1>(),0 ))";
       ++idx;
     }
     DAWN_ASSERT(nonTempFields.size() > 0);
@@ -570,9 +570,10 @@ void CudaCodeGen::generateStencilRunMethod(
         const auto fieldName =
             stencilInstantiation->getNameFromAccessID((*field).second.getAccessID());
 
-        args = args + ", (" + fieldName + ".data()+" + "m_" + fieldName +
-               ".get_storage_info_ptr()->index(" + fieldName + ".begin<0>(), " + fieldName +
-               ".begin<1>()," + fieldName + ".begin<2>()," + fieldName + ".begin<3>(), 0))";
+        args = args + ", (gridtools::clang::float_type2*)(" + fieldName + ".data()+" + "m_" +
+               fieldName + ".get_storage_info_ptr()->index(" + fieldName + ".begin<0>(), " +
+               fieldName + ".begin<1>()," + fieldName + ".begin<2>()," + fieldName +
+               ".begin<3>(), 0))";
       } else {
         args =
             args + "," + stencilInstantiation->getNameFromAccessID((*field).second.getAccessID());
@@ -675,6 +676,7 @@ std::unique_ptr<TranslationUnit> CudaCodeGen::generateCode() {
   //==============------------------------------------------------------------------------------===
   CodeGen::addMplIfdefs(ppDefines, 30, context_->getOptions().MaxHaloPoints);
 
+  generateDefs(ppDefines);
   generateBCHeaders(ppDefines);
 
   DAWN_LOG(INFO) << "Done generating code";

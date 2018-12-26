@@ -16,6 +16,7 @@
 #define DAWN_CODEGEN_CUDA_ASTSTENCILBODY_H
 
 #include "dawn/CodeGen/ASTCodeGenCXX.h"
+#include "dawn/CodeGen/CXXUtil.h"
 #include "dawn/CodeGen/CodeGenProperties.h"
 #include "dawn/CodeGen/Cuda/CacheProperties.h"
 #include "dawn/CodeGen/Cuda/CodeGeneratorHelper.h"
@@ -44,7 +45,8 @@ protected:
   const std::unique_ptr<iir::MultiStage>& ms_;
   const CacheProperties& cacheProperties_;
   const Array3ui blockSizes_;
-  std::string suf_;
+  int id_;
+  bool activateLocalField_ = false;
 
 public:
   using Base = ASTCodeGenCXX;
@@ -56,15 +58,19 @@ public:
                  Array3ui blockSizes);
 
   virtual ~ASTStencilBody() override;
-
+  void setId(const int id) { id_ = id; }
   void setFieldSuffix(std::string suf);
+
+  virtual std::string getCodeAndResetStream() override;
 
   /// @name Statement implementation
   /// @{
+  virtual void visit(const std::shared_ptr<VarDeclStmt>& expr) override;
   virtual void visit(const std::shared_ptr<ReturnStmt>& stmt) override;
   virtual void visit(const std::shared_ptr<VerticalRegionDeclStmt>& stmt) override;
   virtual void visit(const std::shared_ptr<StencilCallDeclStmt>& stmt) override;
   virtual void visit(const std::shared_ptr<BoundaryConditionDeclStmt>& stmt) override;
+  virtual void visit(const std::shared_ptr<AssignmentExpr>& expr) override;
   /// @}
 
   /// @name Expression implementation
@@ -82,6 +88,44 @@ public:
 private:
   void derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr);
   void derefKCache(const std::shared_ptr<FieldAccessExpr>& expr);
+};
+
+class LocalDecler : public ASTVisitorForwarding {
+protected:
+  const std::shared_ptr<iir::StencilInstantiation>& instantiation_;
+  RangeToString offsetPrinter_;
+  const std::unordered_map<int, Array3i>& fieldIndexMap_;
+  const std::unique_ptr<iir::MultiStage>& ms_;
+  const CacheProperties& cacheProperties_;
+  const Array3ui blockSizes_;
+  MemberFunction& cudaKernel_;
+
+  const int id_;
+
+  std::set<std::string> loaded_;
+  bool activateLocalField_ = false;
+
+public:
+  using Base = ASTCodeGenCXX;
+
+  /// @brief constructor
+  LocalDecler(const int id, MemberFunction& cudaKernel,
+              const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
+              const std::unordered_map<int, Array3i>& fieldIndexMap,
+              const std::unique_ptr<iir::MultiStage>& ms, const CacheProperties& cacheProperties,
+              Array3ui blockSizes);
+
+  virtual ~LocalDecler() override;
+
+  /// @name Statement implementation
+  /// @{
+  /// @}
+
+  /// @name Expression implementation
+  /// @{
+  virtual void visit(const std::shared_ptr<AssignmentExpr>& expr) override;
+  virtual void visit(const std::shared_ptr<FieldAccessExpr>& expr) override;
+  /// @}
 };
 
 } // namespace cuda
