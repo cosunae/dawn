@@ -173,13 +173,13 @@ void CodeGeneratorHelper::generateFieldAccessLoad(
 
 std::string CodeGeneratorHelper::getLocaDerefName(
     const std::shared_ptr<iir::StencilInstantiation>& instantiation, int id, const int accessID,
-    const Array3i& offset) {
+    const Array3i& offsets) {
   std::string name = instantiation->getNameFromAccessID(accessID);
 
   name = name + "_" + std::to_string(id);
 
   std::stringstream ss;
-  for(auto offset : offset) {
+  for(auto offset : offsets) {
     if(offset != 0)
       ss << (offset > 0 ? "plus_" : "minus_") << std::abs(offset);
   }
