@@ -81,7 +81,7 @@ std::vector<std::string> CodeGeneratorHelper::generateStrideArguments(
       if(!(usedDim++))
         continue;
       if(funArg == CodeGeneratorHelper::FunctionArgType::FT_Caller) {
-        strides.push_back("m_" + fieldName + ".strides()[" + std::to_string(i) + "]");
+        strides.push_back("m_" + fieldName + ".strides()[" + std::to_string(i) + "]/2");
       } else {
         strides.push_back("const int stride_" + CodeGeneratorHelper::indexIteratorName(dims) + "_" +
                           std::to_string(i));
@@ -95,8 +95,8 @@ std::vector<std::string> CodeGeneratorHelper::generateStrideArguments(
     if(funArg == CodeGeneratorHelper::FunctionArgType::FT_Caller) {
       strides.push_back("m_" + fieldName + ".get_storage_info_ptr()->template begin<0>()," + "m_" +
                         fieldName + ".get_storage_info_ptr()->template begin<1>()," + "m_" +
-                        fieldName + ".get_storage_info_ptr()->template stride<1>()," + "m_" +
-                        fieldName + ".get_storage_info_ptr()->template stride<4>()");
+                        fieldName + ".get_storage_info_ptr()->template stride<1>()/2," + "m_" +
+                        fieldName + ".get_storage_info_ptr()->template stride<4>()/2");
     } else {
       strides.push_back("const int tmpBeginIIndex, const int tmpBeginJIndex, const int "
                         "jstride_tmp, const int kstride_tmp");

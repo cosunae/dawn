@@ -529,7 +529,7 @@ void CudaCodeGen::generateStencilRunMethod(
         ",1)");
 
     // number of blocks required
-    StencilRunMethod.addStatement("const unsigned int nbx = (nx + " + std::to_string(ntx) +
+    StencilRunMethod.addStatement("const unsigned int nbx = (nx/2 + " + std::to_string(ntx) +
                                   " - 1) / " + std::to_string(ntx));
     StencilRunMethod.addStatement("const unsigned int nby = (ny + " + std::to_string(nty) +
                                   " - 1) / " + std::to_string(nty));
