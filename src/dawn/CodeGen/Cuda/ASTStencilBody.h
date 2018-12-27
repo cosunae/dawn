@@ -125,6 +125,8 @@ public:
   /// @{
   virtual void visit(const std::shared_ptr<AssignmentExpr>& expr) override;
   virtual void visit(const std::shared_ptr<FieldAccessExpr>& expr) override;
+  virtual void visit(const std::shared_ptr<VarDeclStmt>& stmt) override;
+
   /// @}
 };
 

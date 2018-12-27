@@ -96,6 +96,7 @@ void ASTStencilBody::visit(const std::shared_ptr<StencilFunArgExpr>& expr) {
 
 void ASTStencilBody::visit(const std::shared_ptr<VarDeclStmt>& stmt) {
 
+  activateLocalField_ = true;
   if(scopeDepth_ == 0)
     ss_ << std::string(indent_, ' ');
 
@@ -158,9 +159,36 @@ void ASTStencilBody::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
     return;
   }
 
-  CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
-                                                fieldIndexMap_, expr->getOffset(),
-                                                activateLocalField_, suf_);
+  auto offsets = expr->getOffset();
+  if(offsets[0] % 2 != 0) {
+    if(offsets[0] > 0) {
+      if(suf_ == "x") {
+        offsets[0] = offsets[0] - 1;
+        CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
+                                                      fieldIndexMap_, offsets, activateLocalField_,
+                                                      "y");
+      } else if(suf_ == "y") {
+        CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
+                                                      fieldIndexMap_, offsets, activateLocalField_,
+                                                      "x");
+      }
+    } else {
+      if(suf_ == "x") {
+        CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
+                                                      fieldIndexMap_, offsets, activateLocalField_,
+                                                      "y");
+      } else if(suf_ == "y") {
+        offsets[0] = offsets[0] + 1;
+        CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
+                                                      fieldIndexMap_, offsets, activateLocalField_,
+                                                      "x");
+      }
+    }
+  } else {
+    CodeGeneratorHelper::generateFieldAccessDeref(ss_, id_, ms_, instantiation_, accessID,
+                                                  fieldIndexMap_, expr->getOffset(),
+                                                  activateLocalField_, suf_);
+  }
 }
 
 void ASTStencilBody::setFieldSuffix(std::string suf) { suf_ = suf; }
@@ -226,6 +254,20 @@ void LocalDecler::visit(const std::shared_ptr<AssignmentExpr>& expr) {
   activateLocalField_ = true;
   expr->getRight()->accept(*this);
 }
+void LocalDecler::visit(const std::shared_ptr<VarDeclStmt>& stmt) {
+  activateLocalField_ = true;
+  if(stmt->hasInit()) {
+    if(!stmt->isArray())
+      stmt->getInitList().front()->accept(*this);
+    else {
+      int numInit = stmt->getInitList().size();
+      for(int i = 0; i < numInit; ++i) {
+        stmt->getInitList()[i]->accept(*this);
+      }
+    }
+  }
+}
+
 void LocalDecler::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
   if(!activateLocalField_) {
     return;
@@ -243,16 +285,31 @@ void LocalDecler::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
   std::string name =
       CodeGeneratorHelper::getLocaDerefName(instantiation_, id_, accessID, expr->getOffset());
 
-  if(loaded_.count(name))
-    return;
+  if(!loaded_.count(name)) {
+    loaded_.insert(name);
 
-  std::stringstream ss;
-  CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, instantiation_, accessID, fieldIndexMap_,
-                                               expr->getOffset());
+    std::stringstream ss;
+    CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, instantiation_, accessID, fieldIndexMap_,
+                                                 expr->getOffset());
 
-  cudaKernel_.addStatement("gridtools::clang::float_type2 " + name + "=" + ss.str());
+    cudaKernel_.addStatement("gridtools::clang::float_type2 " + name + "=" + ss.str());
+  }
+  if((expr->getOffset()[0] != 0) && (expr->getOffset()[0] % 2 != 0)) {
+    std::stringstream ss;
+    auto offsets = expr->getOffset();
+    offsets[0] = offsets[0] + ((offsets[0] > 0) ? -1 : 1);
 
-  loaded_.insert(name);
+    name = CodeGeneratorHelper::getLocaDerefName(instantiation_, id_, accessID, offsets);
+
+    if(!loaded_.count(name)) {
+      loaded_.insert(name);
+
+      CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, instantiation_, accessID,
+                                                   fieldIndexMap_, offsets);
+
+      cudaKernel_.addStatement("gridtools::clang::float_type2 " + name + "=" + ss.str());
+    }
+  }
   return;
 }
 
