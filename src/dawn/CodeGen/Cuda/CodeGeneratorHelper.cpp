@@ -182,7 +182,13 @@ std::string CodeGeneratorHelper::getLocaDerefName(
   int i = 0;
   for(auto offset : offsets) {
     if(offset != 0) {
-      ss << i;
+      if(i == 0)
+        ss << "i";
+      else if(i == 1)
+        ss << "j";
+      else if(i == 2)
+        ss << "k";
+
       ss << (offset > 0 ? "plus_" : "minus_") << std::abs(offset);
     }
     ++i;
