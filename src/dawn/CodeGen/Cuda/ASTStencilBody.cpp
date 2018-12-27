@@ -196,16 +196,31 @@ void ASTStencilBody::derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr) 
   }
   DAWN_ASSERT(expr->getOffset()[2] == 0);
 
-  auto offset = expr->getOffset();
-  std::string offsetStr;
-  if(offset[0] != 0)
-    offsetStr += std::to_string(offset[0]);
-  if(offset[1] != 0)
-    offsetStr += ((offsetStr != "") ? "+" : "") + std::to_string(offset[1]) + "*" +
-                 std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
-  ss_ << accessName
-      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]")) << "."
-      << suf_;
+  auto derefTheCache = [&](Array3i offset_, std::string suf) {
+    std::string offsetStr;
+    if(offset_[0] != 0)
+      offsetStr += std::to_string(offset_[0]);
+    if(offset_[1] != 0)
+      offsetStr += ((offsetStr != "") ? "+" : "") + std::to_string(offset_[1]) + "*" +
+                   std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
+    ss_ << accessName
+        << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]")) << "."
+        << suf;
+  };
+
+  auto offsets = expr->getOffset();
+  if(offsets[0] % 2 != 0) {
+    if(suf_ == "x") {
+      offsets[0] = (offsets[0] - 1) / 2;
+      derefTheCache(offsets, "y");
+    } else if(suf_ == "y") {
+      offsets[0] = (offsets[0] + 1) / 2;
+      derefTheCache(offsets, "x");
+    }
+  } else {
+    offsets[0] /= 2;
+    derefTheCache(offsets, suf_);
+  }
 }
 
 void ASTStencilBody::derefKCache(const std::shared_ptr<FieldAccessExpr>& expr) {
