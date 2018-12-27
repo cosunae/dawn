@@ -179,9 +179,13 @@ std::string CodeGeneratorHelper::getLocaDerefName(
   name = name + "_" + std::to_string(id);
 
   std::stringstream ss;
+  int i = 0;
   for(auto offset : offsets) {
-    if(offset != 0)
+    if(offset != 0) {
+      ss << i;
       ss << (offset > 0 ? "plus_" : "minus_") << std::abs(offset);
+    }
+    ++i;
   }
   std::string offsetStr = ss.str();
 
