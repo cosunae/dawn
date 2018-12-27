@@ -279,7 +279,7 @@ void LocalDecler::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
     loaded_.insert(name);
     std::stringstream ss;
     CodeGeneratorHelper::generateFieldAccessLoad(ss, ms_, instantiation_, accessID, fieldIndexMap_,
-                                                 expr->getOffset());
+                                                 offsets);
 
     cudaKernel_.addStatement("gridtools::clang::float_type2 " + name + "=" + ss.str());
   }
