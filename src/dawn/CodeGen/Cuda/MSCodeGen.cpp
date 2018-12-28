@@ -771,7 +771,7 @@ void MSCodeGen::generateCudaKernelCode() {
       std::string fieldName =
           stencilInstantiation_->getNameFromAccessID((*field).second.getAccessID());
 
-      cudaKernel.addStatement("gridtools::clang::float_type* " + fieldName + " = &" + fieldName +
+      cudaKernel.addStatement("gridtools::clang::float_type2* " + fieldName + " = &" + fieldName +
                               "_dv(tmpBeginIIndex,tmpBeginJIndex,blockIdx.x,blockIdx.y,0)");
     }
   }
