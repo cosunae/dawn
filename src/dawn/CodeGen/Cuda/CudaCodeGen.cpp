@@ -510,10 +510,7 @@ void CudaCodeGen::generateStencilRunMethod(
 
     DAWN_ASSERT(nonTempFields.size() > 0);
 
-    iir::Extents maxExtents{0, 0, 0, 0, 0, 0};
-    for(const auto& stage : iterateIIROver<iir::Stage>(*multiStagePtr)) {
-      maxExtents.merge(stage->getExtents());
-    }
+    iir::Extents maxExtents = multiStagePtr->computeMaxExtentStages();
 
     StencilRunMethod.addStatement(
         "const unsigned int nx = m_dom.isize() - m_dom.iminus() - m_dom.iplus()");

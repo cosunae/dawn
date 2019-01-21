@@ -119,10 +119,35 @@ iir::Extents CodeGeneratorHelper::computeTempMaxWriteExtent(iir::Stencil const& 
   return maxExtents;
 }
 
+void CodeGeneratorHelper::derefIJCache(std::stringstream& ss,
+                                       const CacheProperties& cacheProperties, const int accessID,
+                                       const Array3ui blockSizes, const Array3i offset) {
+  std::string accessName = cacheProperties.getCacheName(accessID);
+
+  std::string index;
+  if(cacheProperties.isCommonCache(accessID)) {
+    index = cacheProperties.getCommonCacheIndexName(iir::Cache::CacheTypeKind::IJ);
+  } else {
+    index = "iblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 0)) +
+            " (jblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 1)) +
+            ")*" + std::to_string(cacheProperties.getStride(accessID, 1, blockSizes));
+  }
+  DAWN_ASSERT(offset[2] == 0);
+
+  std::string offsetStr;
+  if(offset[0] != 0)
+    offsetStr += std::to_string(offset[0]);
+  if(offset[1] != 0)
+    offsetStr += ((offsetStr != "") ? "+" : "") + std::to_string(offset[1]) + "*" +
+                 std::to_string(cacheProperties.getStride(accessID, 1, blockSizes));
+  ss << accessName
+     << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]"));
+}
+
 void CodeGeneratorHelper::generateFieldAccessDeref(
     std::stringstream& ss, const std::unique_ptr<iir::MultiStage>& ms,
     const std::shared_ptr<iir::StencilInstantiation>& instantiation, const int accessID,
-    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset) {
+    const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset, const bool useLdg) {
   std::string accessName = instantiation->getNameFromAccessID(accessID);
   bool isTemporary = instantiation->isTemporaryField(accessID);
   DAWN_ASSERT(fieldIndexMap.count(accessID) || isTemporary);
@@ -137,9 +162,11 @@ void CodeGeneratorHelper::generateFieldAccessDeref(
   std::string offsetStr = RangeToString("+", "", "", true)(
       CodeGeneratorHelper::ijkfyOffset(offset, useTmpIndex_, iter));
   const bool readOnly = (field.getIntend() == iir::Field::IntendKind::IK_Input);
-  ss << (readOnly ? "__ldg(&(" : "") << accessName
+  const bool useLdg_ = readOnly && useLdg;
+
+  ss << (useLdg_ ? "__ldg(&(" : "") << accessName
      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]"))
-     << (readOnly ? "))" : "");
+     << (useLdg_ ? "))" : "");
 }
 
 std::array<std::string, 3> CodeGeneratorHelper::ijkfyOffset(const Array3i& offsets,

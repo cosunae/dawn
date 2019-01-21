@@ -211,6 +211,14 @@ Cache& MultiStage::setCache(iir::Cache::CacheTypeKind type, iir::Cache::CacheIOP
       .first->second;
 }
 
+Extents MultiStage::computeMaxExtentStages() const {
+  iir::Extents maxExtents{0, 0, 0, 0, 0, 0};
+  for(const auto& stage : iterateIIROver<iir::Stage>(*this)) {
+    maxExtents.merge(stage->getExtents());
+  }
+  return maxExtents;
+}
+
 std::vector<std::unique_ptr<DoMethod>> MultiStage::computeOrderedDoMethods() const {
   auto intervals_set = getIntervals();
   std::vector<Interval> intervals_v;

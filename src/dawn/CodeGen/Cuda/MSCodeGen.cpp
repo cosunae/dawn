@@ -61,7 +61,8 @@ void MSCodeGen::generateIJCacheDecl(MemberFunction& kernel) const {
     const iir::Cache& cache = cacheP.second;
     if(cache.getCacheType() != iir::Cache::CacheTypeKind::IJ)
       continue;
-    DAWN_ASSERT(cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::local);
+    DAWN_ASSERT((cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::local) ||
+                (cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::fill));
 
     const int accessID = cache.getCachedFieldAccessID();
     const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
@@ -305,6 +306,82 @@ std::string MSCodeGen::makeLoopImpl(const iir::Extent extent, const std::string&
       .str();
 }
 
+void MSCodeGen::generateFillIJCachesStmt(MemberFunction& cudaKernel, const int accessID,
+                                         const std::unordered_map<int, Array3i>& fieldIndexMap,
+                                         const Array3i offset) const {
+
+  std::stringstream ss;
+  CodeGeneratorHelper::derefIJCache(ss, cacheProperties_, accessID, blockSize_, offset);
+  ss << "=";
+  CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_, accessID,
+                                                fieldIndexMap, offset, false);
+
+  cudaKernel.addStatement(ss.str());
+}
+
+// TODO need to move fieldIndexMap into iir::Field
+void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
+                                     const std::unordered_map<int, Array3i>& fieldIndexMap) const {
+  for(const auto& cachePair : ms_->getCaches()) {
+    const int accessID = cachePair.first;
+    const auto& cache = cachePair.second;
+
+    // TODO this is wrong, the interval of the access is not necessarily the interval where the
+    // cache requires a fill. This has to be properly handled by the PassSetCaches, allowing to set
+    // multiple caches on several intervals for the same accessID
+    const auto cacheInterval = ms_->getField(accessID).getInterval();
+    if(cache.getCacheIOPolicy() != iir::Cache::CacheIOPolicy::fill) {
+      continue;
+    }
+    if(cache.getCacheType() != iir::Cache::CacheTypeKind::IJ) {
+      continue;
+    }
+    if(!cacheInterval.overlaps(interval)) {
+      continue;
+    }
+
+    iir::Extents maxExtentsStages = ms_->computeMaxExtentStages();
+
+    auto extentsP = ms_->computeExtents(accessID, interval);
+    DAWN_ASSERT(extentsP.is_initialized());
+    auto extents = *extentsP;
+
+    // TODO should fieldIndexMap be a member of MSCodeGen ?
+    generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, 0, 0});
+    for(int jdiff = extents[1].Minus + maxExtentsStages[1].Minus; jdiff < 0; ++jdiff) {
+      cudaKernel.addBlockStatement(
+          "if(jblock == " + std::to_string(maxExtentsStages[1].Minus) + ")", [&]() {
+            Array3i offset{0, jdiff, 0};
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
+          });
+    }
+    for(int jdiff = extents[1].Plus - maxExtentsStages[1].Plus; jdiff > 0; --jdiff) {
+      cudaKernel.addBlockStatement(
+          "if(jblock == " + std::to_string(blockSize_[1] - 1 + maxExtentsStages[1].Plus) + ")",
+          [&]() {
+            Array3i offset{0, jdiff, 0};
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
+          });
+    }
+    for(int idiff = extents[0].Minus + maxExtentsStages[0].Minus; idiff < 0; ++idiff) {
+      cudaKernel.addBlockStatement(
+          "if(iblock == " + std::to_string(maxExtentsStages[0].Minus) + ")", [&]() {
+            Array3i offset{idiff, 0, 0};
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
+          });
+    }
+
+    for(int idiff = extents[0].Plus - maxExtentsStages[0].Plus; idiff > 0; --idiff) {
+      cudaKernel.addBlockStatement(
+          "if(iblock == " + std::to_string(blockSize_[0] - 1 + maxExtentsStages[0].Plus) + ")",
+          [&]() {
+            Array3i offset{idiff, 0, 0};
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
+          });
+    }
+  }
+  cudaKernel.addStatement("__syncthreads()");
+}
 void MSCodeGen::generateFillKCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
                                     const std::unordered_map<int, Array3i>& fieldIndexMap) const {
   cudaKernel.addComment("Head fill of kcaches");
@@ -1027,6 +1104,8 @@ void MSCodeGen::generateCudaKernelCode() {
       if(!solveKLoopInParallel_) {
         generateFillKCaches(cudaKernel, interval, fieldIndexMap);
       }
+
+      generateFillIJCaches(cudaKernel, interval, fieldIndexMap);
 
       for(const auto& stagePtr : ms_->getChildren()) {
         const iir::Stage& stage = *stagePtr;

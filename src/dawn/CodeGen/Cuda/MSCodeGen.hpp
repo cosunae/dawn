@@ -92,6 +92,14 @@ private:
   /// need to be filled before we start the k looping
   void generatePreFillKCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
                               const std::unordered_map<int, Array3i>& fieldIndexMap) const;
+
+  void generateFillIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
+                            const std::unordered_map<int, Array3i>& fieldIndexMap) const;
+
+  void generateFillIJCachesStmt(MemberFunction& cudaKernel, const int accessID,
+                                const std::unordered_map<int, Array3i>& fieldIndexMap,
+                                const Array3i offset) const;
+
   /// @brief generate a fill of the top level of the kcache, at every k iteration
   void generateFillKCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
                            const std::unordered_map<int, Array3i>& fieldIndexMap) const;

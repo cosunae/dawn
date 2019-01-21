@@ -185,23 +185,39 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
             continue;
           }
 
-          // Currently we only cache temporaries!
-          if(!instantiation->isTemporaryField(field.getAccessID())) {
-            continue;
-          }
+          // Cache temporaries as local cache
+          if(instantiation->isTemporaryField(field.getAccessID())) {
+            if(field.getIntend() == iir::Field::IK_Input &&
+               outputFields.count(field.getAccessID()) &&
+               !field.getExtents().isHorizontalPointwise()) {
 
-          // Cache the field
-          if(field.getIntend() == iir::Field::IK_Input && outputFields.count(field.getAccessID()) &&
-             !field.getExtents().isHorizontalPointwise()) {
+              iir::Cache& cache =
+                  MS.setCache(iir::Cache::IJ, iir::Cache::local, field.getAccessID());
 
-            iir::Cache& cache = MS.setCache(iir::Cache::IJ, iir::Cache::local, field.getAccessID());
+              if(context->getOptions().ReportPassSetCaches) {
+                std::cout << "\nPASS: " << getName() << ": " << instantiation->getName() << ": MS"
+                          << msIdx << ": "
+                          << instantiation->getOriginalNameFromAccessID(field.getAccessID()) << ":"
+                          << cache.getCacheTypeAsString() << ":" << cache.getCacheIOPolicyAsString()
+                          << std::endl;
+              }
+            }
+          } else {
+            if((field.getIntend() == iir::Field::IK_Input) &&
+               !field.getExtents().isHorizontalPointwise()) {
+              // TODO we need to be able to set multilpe cache per ID. For the same ID sometimes we
+              // might need to fill or local in different intervals
+              iir::Cache& cache =
+                  MS.setCache(iir::Cache::IJ, iir::Cache::fill, field.getAccessID());
 
-            if(context->getOptions().ReportPassSetCaches) {
-              std::cout << "\nPASS: " << getName() << ": " << instantiation->getName() << ": MS"
-                        << msIdx << ": "
-                        << instantiation->getOriginalNameFromAccessID(field.getAccessID()) << ":"
-                        << cache.getCacheTypeAsString() << ":" << cache.getCacheIOPolicyAsString()
-                        << std::endl;
+              // TODO unify report with previous one
+              if(context->getOptions().ReportPassSetCaches) {
+                std::cout << "\nPASS: " << getName() << ": " << instantiation->getName() << ": MS"
+                          << msIdx << ": "
+                          << instantiation->getOriginalNameFromAccessID(field.getAccessID()) << ":"
+                          << cache.getCacheTypeAsString() << ":" << cache.getCacheIOPolicyAsString()
+                          << std::endl;
+              }
             }
           }
 

@@ -103,7 +103,9 @@ void ASTStencilBody::visit(const std::shared_ptr<VarAccessExpr>& expr) {
 void ASTStencilBody::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
   int accessID = instantiation_->getAccessIDFromExpr(expr);
   if(cacheProperties_.isIJCached(accessID)) {
-    derefIJCache(expr);
+    CodeGeneratorHelper::derefIJCache(ss_, cacheProperties_,
+                                      instantiation_->getAccessIDFromExpr(expr), blockSizes_,
+                                      expr->getOffset());
     return;
   }
   if(cacheProperties_.isKCached(accessID)) {
@@ -113,31 +115,6 @@ void ASTStencilBody::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
 
   CodeGeneratorHelper::generateFieldAccessDeref(ss_, ms_, instantiation_, accessID, fieldIndexMap_,
                                                 expr->getOffset());
-}
-
-void ASTStencilBody::derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr) {
-  int accessID = instantiation_->getAccessIDFromExpr(expr);
-  std::string accessName = cacheProperties_.getCacheName(accessID);
-
-  std::string index;
-  if(cacheProperties_.isCommonCache(accessID)) {
-    index = cacheProperties_.getCommonCacheIndexName(iir::Cache::CacheTypeKind::IJ);
-  } else {
-    index = "iblock - " + std::to_string(cacheProperties_.getOffsetBeginIJCache(accessID, 0)) +
-            " (jblock - " + std::to_string(cacheProperties_.getOffsetBeginIJCache(accessID, 1)) +
-            ")*" + std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
-  }
-  DAWN_ASSERT(expr->getOffset()[2] == 0);
-
-  auto offset = expr->getOffset();
-  std::string offsetStr;
-  if(offset[0] != 0)
-    offsetStr += std::to_string(offset[0]);
-  if(offset[1] != 0)
-    offsetStr += ((offsetStr != "") ? "+" : "") + std::to_string(offset[1]) + "*" +
-                 std::to_string(cacheProperties_.getStride(accessID, 1, blockSizes_));
-  ss_ << accessName
-      << (offsetStr.empty() ? "[" + index + "]" : ("[" + index + "+" + offsetStr + "]"));
 }
 
 void ASTStencilBody::derefKCache(const std::shared_ptr<FieldAccessExpr>& expr) {

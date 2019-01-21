@@ -191,6 +191,8 @@ public:
   /// @brief computes the extents of an accessID field at a given interval
   boost::optional<Extents> computeExtents(const int accessID, const Interval& interval) const;
 
+  Extents computeMaxExtentStages() const;
+
   MultiInterval computePartitionOfIntervals() const;
 };
 
