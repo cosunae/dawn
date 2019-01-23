@@ -19,6 +19,7 @@
 #include "dawn/IIR/IIRNodeIterator.h"
 #include "dawn/Optimizer/OptimizerContext.h"
 #include "dawn/Support/IndexRange.h"
+#include "dawn/CodeGen/CodeGen.h"
 #include <functional>
 #include <numeric>
 
@@ -765,7 +766,7 @@ void MSCodeGen::generateCudaKernelCode() {
   }
 
   // fields used in the stencil
-  const auto& fields = ms_->getFields();
+  const auto fields = orderMap(ms_->getFields());
 
   auto nonTempFields =
       makeRange(fields, std::function<bool(std::pair<int, iir::Field> const&)>([&](
