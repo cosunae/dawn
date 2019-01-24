@@ -75,7 +75,8 @@ GTCodeGen::IntervalDefinitions::IntervalDefinitions(const iir::Stencil& stencil)
       // for the kcaches with fill, the interval could span beyond the axis of the do methods.
       // We need to extent the axis, to make sure that at least on interval will trigger the begin
       // of the kcache interval
-      if(cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::fill) {
+      if((cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::fill) &&
+         (cache.getCacheType() == iir::Cache::K)) {
         DAWN_ASSERT(interval.is_initialized());
         Levels.insert(interval->lowerLevel());
         Levels.insert(interval->upperLevel());
@@ -602,8 +603,12 @@ void GTCodeGen::generateStencilClasses(
 
         std::vector<iir::Cache> ioCaches;
         for(const auto& cacheP : multiStage.getCaches()) {
-          if((cacheP.second.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::bpfill) ||
-             (cacheP.second.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::epflush)) {
+          const auto& cache = cacheP.second;
+          // we ignore the caches that are not supported in GT
+          if((cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::bpfill) ||
+             (cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::epflush) ||
+             ((cache.getCacheIOPolicy() != iir::Cache::CacheIOPolicy::local) &&
+              cache.getCacheType() != iir::Cache::CacheTypeKind::K)) {
             continue;
           }
           ioCaches.push_back(cacheP.second);
