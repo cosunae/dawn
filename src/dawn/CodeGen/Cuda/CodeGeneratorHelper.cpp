@@ -50,8 +50,9 @@ std::string CodeGeneratorHelper::buildCudaKernelName(
          "_ms" + std::to_string(ms->getID()) + "_kernel";
 }
 
-std::vector<std::string> CodeGeneratorHelper::generateStrideArguments(const IndexRange<const std::map<int, iir::Field> > &nonTempFields,
-    const IndexRange<const std::map<int, iir::Field> > &tempFields,
+std::vector<std::string> CodeGeneratorHelper::generateStrideArguments(
+    const IndexRange<const std::map<int, iir::Field>>& nonTempFields,
+    const IndexRange<const std::map<int, iir::Field>>& tempFields,
     const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
     const std::unique_ptr<iir::MultiStage>& ms, CodeGeneratorHelper::FunctionArgType funArg) {
 
@@ -127,8 +128,8 @@ void CodeGeneratorHelper::derefIJCache(std::stringstream& ss,
   if(cacheProperties.isCommonCache(accessID)) {
     index = cacheProperties.getCommonCacheIndexName(iir::Cache::CacheTypeKind::IJ);
   } else {
-    index = "iblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 0)) +
-            " (jblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 1)) +
+    index = "(iblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 0)) +
+            ") + (jblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 1)) +
             ")*" + std::to_string(cacheProperties.getStride(accessID, 1, blockSizes));
   }
   DAWN_ASSERT(offset[2] == 0);
