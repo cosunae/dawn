@@ -368,7 +368,7 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
     }
     for(int jdiff = extents[1].Plus - maxExtentsStages[1].Plus; jdiff > 0; --jdiff) {
       cudaKernel.addBlockStatement(
-          "if(jblock == " + std::to_string(blockSize_[1] - 1 + maxExtentsStages[1].Plus) +
+          "if(jblock == block_size_j " + std::to_string(maxExtentsStages[1].Plus - 1) +
               " && iblock >= " + std::to_string(maxExtentsStages[0].Minus - 1) +
               " && iblock <= block_size_i +" + std::to_string(maxExtentsStages[0].Plus) + ")",
           [&]() {
@@ -389,7 +389,7 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
 
     for(int idiff = extents[0].Plus - maxExtentsStages[0].Plus; idiff > 0; --idiff) {
       cudaKernel.addBlockStatement(
-          "if(iblock == " + std::to_string(blockSize_[0] - 1 + maxExtentsStages[0].Plus) +
+          "if(iblock == block_size_i " + std::to_string(maxExtentsStages[0].Plus - 1) +
               " && jblock >= " + std::to_string(maxExtentsStages[1].Minus) +
               " && jblock <= block_size_j +" + std::to_string(maxExtentsStages[1].Plus - 1) + ")",
           [&]() {
