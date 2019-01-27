@@ -350,7 +350,7 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
     // TODO should fieldIndexMap be a member of MSCodeGen ?
     cudaKernel.addBlockStatement(
         "if(iblock >= " + std::to_string(maxExtentsStages[0].Minus) +
-            " && iblock <= block_size_j + " + std::to_string(maxExtentsStages[0].Plus - 1) +
+            " && iblock <= block_size_i + " + std::to_string(maxExtentsStages[0].Plus - 1) +
             " && jblock >= " + std::to_string(maxExtentsStages[1].Minus) +
             " && jblock <= block_size_j +" + std::to_string(maxExtentsStages[1].Plus - 1) + ")",
         [&]() {
