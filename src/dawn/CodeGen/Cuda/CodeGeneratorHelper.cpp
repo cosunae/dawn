@@ -128,8 +128,8 @@ void CodeGeneratorHelper::derefIJCache(std::stringstream& ss,
   if(cacheProperties.isCommonCache(accessID)) {
     index = cacheProperties.getCommonCacheIndexName(iir::Cache::CacheTypeKind::IJ);
   } else {
-    index = "(iblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 0)) +
-            ") + (jblock - " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 1)) +
+    index = "(iblock + " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 0)) +
+            ") + (jblock + " + std::to_string(cacheProperties.getOffsetBeginIJCache(accessID, 1)) +
             ")*" + std::to_string(cacheProperties.getStride(accessID, 1, blockSizes));
   }
   DAWN_ASSERT(offset[2] == 0);
