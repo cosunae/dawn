@@ -50,6 +50,8 @@ struct CacheProperties {
   /// @brief returns the stride in a diven dimension of an IJ cache
   int getStride(int accessID, int dim, Array3ui blockSize) const;
 
+  unsigned int getCacheDimLength(int accessID, unsigned int dim) const;
+
   /// @brief returns the stride in a diven dimension of common cache @see isCommonCache
   int getStrideCommonCache(int dim, Array3ui blockSize) const;
 

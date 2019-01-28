@@ -115,6 +115,13 @@ bool CacheProperties::accessIsCached(const int accessID) const {
   return ms_->isCached(accessID) && (isIJCached(accessID) || isKCached(accessID));
 }
 
+unsigned int CacheProperties::getCacheDimLength(int accessID, unsigned int dim) const {
+  DAWN_ASSERT(dim < 3);
+  const auto& maxExtents = getCacheExtent(accessID);
+  auto blockSize = stencilInstantiation_->getIIR()->getBlockSize();
+  return blockSize[dim] + (maxExtents[dim].Plus - maxExtents[dim].Minus);
+}
+
 iir::Extents CacheProperties::getCacheExtent(int accessID) const {
   if(isCommonCache(accessID)) {
     return extents_;

@@ -66,12 +66,11 @@ void MSCodeGen::generateIJCacheDecl(MemberFunction& kernel) const {
                 (cache.getCacheIOPolicy() == iir::Cache::CacheIOPolicy::fill));
 
     const int accessID = cache.getCachedFieldAccessID();
-    const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
 
-    kernel.addStatement(
-        "__shared__ gridtools::clang::float_type " + cacheProperties_.getCacheName(accessID) + "[" +
-        std::to_string(blockSize_[0] + (maxExtents[0].Plus - maxExtents[0].Minus)) + "*" +
-        std::to_string(blockSize_[1] + (maxExtents[1].Plus - maxExtents[1].Minus)) + "]");
+    kernel.addStatement("__shared__ gridtools::clang::float_type " +
+                        cacheProperties_.getCacheName(accessID) + "[" +
+                        std::to_string(cacheProperties_.getCacheDimLength(accessID, 0)) + "*" +
+                        std::to_string(cacheProperties_.getCacheDimLength(accessID, 1)) + "]");
   }
 }
 
@@ -312,10 +311,18 @@ void MSCodeGen::generateFillIJCachesStmt(MemberFunction& cudaKernel, const int a
                                          const Array3i offset) const {
 
   std::stringstream ss;
-  CodeGeneratorHelper::derefIJCache(ss, cacheProperties_, accessID, blockSize_, offset);
-  ss << "=";
-  CodeGeneratorHelper::generateFieldAccessDeref(ss, ms_, stencilInstantiation_, accessID,
-                                                fieldIndexMap, offset, false);
+  std::string accessName = cacheProperties_.getCacheName(accessID);
+
+  const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
+
+  ss << accessName
+     << "[threadIDx.x+" + std::to_string(offset[0]) + "+(threadIdx.y+" + std::to_string(offset[1]) +
+            ")*"
+     << std::to_string(cacheProperties_.getCacheDimLength(accessID, 0)) << "]=";
+
+  CodeGeneratorHelper::generateFieldAccessDeref(
+      ss, ms_, stencilInstantiation_, accessID, fieldIndexMap,
+      {maxExtents[0].Minus + offset[0], maxExtents[1].Minus + offset[1]}, false);
 
   cudaKernel.addStatement(ss.str());
 }
@@ -343,58 +350,35 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
 
     iir::Extents maxExtentsStages = ms_->computeMaxExtentStages();
 
-    auto extentsP = ms_->computeExtents(accessID, interval);
-    DAWN_ASSERT(extentsP.is_initialized());
-    auto extents = *extentsP;
+    //    auto extentsP = ms_->computeExtents(accessID, interval);
+    //    DAWN_ASSERT(extentsP.is_initialized());
+    //    auto extents = *extentsP;
 
-    // TODO should fieldIndexMap be a member of MSCodeGen ?
+    const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
+
+    generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, 0, 0});
     cudaKernel.addBlockStatement(
-        "if(iblock >= " + std::to_string(maxExtentsStages[0].Minus) +
-            " && iblock <= block_size_i + " + std::to_string(maxExtentsStages[0].Plus - 1) +
-            " && jblock >= " + std::to_string(maxExtentsStages[1].Minus) +
-            " && jblock <= block_size_j +" + std::to_string(maxExtentsStages[1].Plus - 1) + ")",
+        "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
         [&]() {
-          generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, 0, 0});
+          generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {(int)blockSize_[0], 0, 0});
         });
-    for(int jdiff = extents[1].Minus + maxExtentsStages[1].Minus; jdiff < 0; ++jdiff) {
-      cudaKernel.addBlockStatement(
-          "if(jblock == " + std::to_string(maxExtentsStages[1].Minus) + " && iblock >= " +
-              std::to_string(maxExtentsStages[0].Minus) + " && iblock <= block_size_i +" +
-              std::to_string(maxExtentsStages[0].Plus - 1) + ")",
-          [&]() {
-            Array3i offset{0, jdiff, 0};
-            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
-          });
-    }
-    for(int jdiff = extents[1].Plus - maxExtentsStages[1].Plus; jdiff > 0; --jdiff) {
-      cudaKernel.addBlockStatement(
-          "if(jblock == block_size_j " + std::to_string(maxExtentsStages[1].Plus - 1) +
-              " && iblock >= " + std::to_string(maxExtentsStages[0].Minus - 1) +
-              " && iblock <= block_size_i +" + std::to_string(maxExtentsStages[0].Plus) + ")",
-          [&]() {
-            Array3i offset{0, jdiff, 0};
-            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
-          });
-    }
-    for(int idiff = extents[0].Minus + maxExtentsStages[0].Minus; idiff < 0; ++idiff) {
-      cudaKernel.addBlockStatement(
-          "if(iblock == " + std::to_string(maxExtentsStages[0].Minus) + " && jblock >= " +
-              std::to_string(maxExtentsStages[1].Minus) + " && jblock <= block_size_j + " +
-              std::to_string(maxExtentsStages[1].Plus - 1) + ")",
-          [&]() {
-            Array3i offset{idiff, 0, 0};
-            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
-          });
-    }
+    int jFillSize = -maxExtents[1].Minus + maxExtents[1].Plus;
 
-    for(int idiff = extents[0].Plus - maxExtentsStages[0].Plus; idiff > 0; --idiff) {
+    for(int i = 1; i < (jFillSize + blockSize_[1] - 1) / blockSize_[1]; ++i) {
+      int jOffset = i * blockSize_[i];
       cudaKernel.addBlockStatement(
-          "if(iblock == block_size_i " + std::to_string(maxExtentsStages[0].Plus - 1) +
-              " && jblock >= " + std::to_string(maxExtentsStages[1].Minus) +
-              " && jblock <= block_size_j +" + std::to_string(maxExtentsStages[1].Plus - 1) + ")",
+          "if(threadIdx.y < " +
+              std::to_string(-maxExtents[1].Minus + maxExtents[1].Plus - jOffset) + ")",
           [&]() {
-            Array3i offset{idiff, 0, 0};
-            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, offset);
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+            cudaKernel.addBlockStatement(
+                "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) +
+                    ")",
+                [&]() {
+                  generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
+                                           {(int)blockSize_[0], jOffset, 0});
+                });
+
           });
     }
   }
