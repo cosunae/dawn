@@ -75,10 +75,23 @@ void Extents::add(const Extents& other) {
     extents_[i].add(other.getExtents()[i]);
 }
 
+void Extents::diff(const Extents& other) {
+  DAWN_ASSERT(extents_.size() == other.getExtents().size());
+
+  for(std::size_t i = 0; i < extents_.size(); ++i)
+    extents_[i].diff(other.getExtents()[i]);
+}
+
 Extents Extents::add(const Extents& lhs, const Extents& rhs) {
   Extents sum = lhs;
   sum.add(rhs);
   return sum;
+}
+
+Extents Extents::diff(const Extents& outer, const Extents& inner) {
+  Extents tot = outer;
+  tot.diff(inner);
+  return tot;
 }
 
 void Extents::add(const Array3i& offset) {

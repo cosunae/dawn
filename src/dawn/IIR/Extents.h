@@ -17,15 +17,15 @@
 
 #include "dawn/IIR/LoopOrder.h"
 #include "dawn/Support/Array.h"
-#include "dawn/Support/HashCombine.h"
 #include "dawn/Support/Assert.h"
+#include "dawn/Support/HashCombine.h"
 #include <array>
+#include <boost/optional.hpp>
 #include <cmath>
 #include <functional>
 #include <initializer_list>
 #include <iosfwd>
 #include <vector>
-#include <boost/optional.hpp>
 
 namespace dawn {
 namespace iir {
@@ -69,6 +69,14 @@ struct Extent {
   Extent& add(const Extent& other) {
     Minus += other.Minus;
     Plus += other.Plus;
+    return *this;
+  }
+
+  Extent& diff(const Extent& other) {
+    assert(Minus <= other.Minus);
+    assert(Plus >= other.Plus);
+    Minus -= other.Minus;
+    Plus -= other.Plus;
     return *this;
   }
 
@@ -140,7 +148,9 @@ public:
   ///   `{-1, 2, -1, 1, 0, 0}`.
   void add(const Array3i& offset);
   void add(const Extents& other);
+  void diff(const Extents& other);
   static Extents add(const Extents& lhs, const Extents& rhs);
+  static Extents diff(const Extents& outer, const Extents& inner);
 
   /// @brief Check if Extent is empty
   bool empty();
