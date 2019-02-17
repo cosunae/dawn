@@ -350,42 +350,51 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
 
     iir::Extents maxExtentsStages = ms_->computeMaxExtentStages();
 
-    //    auto extentsP = ms_->computeExtents(accessID, interval);
-    //    DAWN_ASSERT(extentsP.is_initialized());
-    //    auto extents = *extentsP;
+    const bool skipSpecializedHaloWarps =
+        (maxExtentsStages[1].Minus != 0 || maxExtentsStages[1].Plus != 0) ? true : false;
 
     const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
-    const auto& overExtents = maxExtents.diff(maxExtents, maxExtentsStages);
 
-    int jFillSize = -maxExtents[1].Minus + maxExtents[1].Plus;
-    int nJReps = (jFillSize + (int)blockSize_[1] + 1) / (int)blockSize_[1];
+    auto ijcacheFillLogic = [&]() {
+      int jFillSize = -maxExtents[1].Minus + maxExtents[1].Plus;
+      int nJReps = (jFillSize + (int)blockSize_[1] + 1) / (int)blockSize_[1];
 
-    for(int i = 0; i < nJReps - 1; ++i) {
-      int jOffset = i * blockSize_[1];
+      for(int i = 0; i < nJReps - 1; ++i) {
+        int jOffset = i * blockSize_[1];
 
-      generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+        generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+        cudaKernel.addBlockStatement(
+            "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
+            [&]() {
+              generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
+                                       {(int)blockSize_[0], jOffset, 0});
+            });
+      }
+
+      int jOffset = (nJReps - 1) * blockSize_[1];
       cudaKernel.addBlockStatement(
-          "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
+          "if(threadIdx.y +" + std::to_string(jOffset) + "< " +
+              std::to_string(blockSize_[1] - maxExtents[1].Minus + maxExtents[1].Plus) + ")",
           [&]() {
-            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
-                                     {(int)blockSize_[0], jOffset, 0});
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+            cudaKernel.addBlockStatement(
+                "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) +
+                    ")",
+                [&]() {
+                  generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
+                                           {(int)blockSize_[0], jOffset, 0});
+                });
+
           });
+    };
+
+    if(skipSpecializedHaloWarps) {
+      int jwarp_limit = (int)blockSize_[1] + +maxExtentsStages[1].Plus - maxExtentsStages[1].Minus;
+      cudaKernel.addBlockStatement("if(threadIdx.y  < " + std::to_string(jwarp_limit) + ")",
+                                   ijcacheFillLogic);
+    } else {
+      ijcacheFillLogic();
     }
-
-    int jOffset = (nJReps - 1) * blockSize_[1];
-    cudaKernel.addBlockStatement(
-        "if(threadIdx.y +" + std::to_string(jOffset) + "< " +
-            std::to_string(blockSize_[1] - maxExtents[1].Minus + maxExtents[1].Plus) + ")",
-        [&]() {
-          generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
-          cudaKernel.addBlockStatement(
-              "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
-              [&]() {
-                generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
-                                         {(int)blockSize_[0], jOffset, 0});
-              });
-
-        });
   }
   cudaKernel.addStatement("__syncthreads()");
 }
@@ -766,10 +775,7 @@ void MSCodeGen::generateFinalFlushKCaches(MemberFunction& cudaKernel, const iir:
 
 void MSCodeGen::generateCudaKernelCode() {
 
-  iir::Extents maxExtents{0, 0, 0, 0, 0, 0};
-  for(const auto& stage : iterateIIROver<iir::Stage>(*ms_)) {
-    maxExtents.merge(stage->getExtents());
-  }
+  auto maxExtents = ms_->computeMaxExtentStages();
 
   // fields used in the stencil
   const auto fields = orderMap(ms_->getFields());
@@ -926,6 +932,7 @@ void MSCodeGen::generateCudaKernelCode() {
 
   cudaKernel.addStatement("int iblock = " + std::to_string(maxExtents[0].Minus) + " - 1");
   cudaKernel.addStatement("int jblock = " + std::to_string(maxExtents[1].Minus) + " - 1");
+
   cudaKernel.addBlockStatement("if(threadIdx.y < +" + std::to_string(jboundary_limit) + ")", [&]() {
     cudaKernel.addStatement("iblock = threadIdx.x");
     cudaKernel.addStatement("jblock = (int)threadIdx.y + " + std::to_string(maxExtents[1].Minus));
