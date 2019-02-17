@@ -205,7 +205,7 @@ void MSCodeGen::generatePreFillKCaches(
   for(const auto& cachePair : ms_->getCaches()) {
     const int accessID = cachePair.first;
     const auto& cache = cachePair.second;
-    if(!CacheProperties::requiresFill(cache))
+    if(!CacheProperties::requiresFill(cache) || cache.getCacheType() != iir::Cache::K)
       continue;
 
     // for a pre-fill operation, we dont take into account the extent over the whole ms (i.e. all
@@ -408,7 +408,7 @@ void MSCodeGen::generateFillKCaches(MemberFunction& cudaKernel, const iir::Inter
   for(const auto& cachePair : ms_->getCaches()) {
     const int accessID = cachePair.first;
     const auto& cache = cachePair.second;
-    if(!CacheProperties::requiresFill(cache))
+    if(!CacheProperties::requiresFill(cache) || cache.getCacheType() != iir::Cache::K)
       continue;
 
     DAWN_ASSERT(cache.getInterval().is_initialized());
