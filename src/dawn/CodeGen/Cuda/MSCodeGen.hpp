@@ -96,6 +96,12 @@ private:
   void generateFillIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
                             const std::unordered_map<int, Array3i>& fieldIndexMap) const;
 
+  void generateFill2DIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
+                              const std::unordered_map<int, Array3i>& fieldIndexMap) const;
+
+  void generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache& cache,
+                           const std::unordered_map<int, Array3i>& fieldIndexMap) const;
+
   void generateFillIJCachesStmt(MemberFunction& cudaKernel, const int accessID,
                                 const std::unordered_map<int, Array3i>& fieldIndexMap,
                                 const Array3i offset) const;

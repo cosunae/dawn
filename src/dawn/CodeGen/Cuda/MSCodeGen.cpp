@@ -340,67 +340,117 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
     // cache requires a fill. This has to be properly handled by the PassSetCaches, allowing to set
     // multiple caches on several intervals for the same accessID
     const auto cacheInterval = ms_->getField(accessID).getInterval();
-    if(cache.getCacheIOPolicy() != iir::Cache::CacheIOPolicy::fill) {
-      continue;
-    }
-    if(cache.getCacheType() != iir::Cache::CacheTypeKind::IJ) {
+    if(cache.getCacheIOPolicy() != iir::Cache::CacheIOPolicy::fill ||
+       cache.getCacheType() != iir::Cache::CacheTypeKind::IJ) {
       continue;
     }
     if(!cacheInterval.overlaps(interval)) {
       continue;
     }
 
-    iir::Extents maxExtentsStages = ms_->computeMaxExtentStages();
+    assert(fieldIndexMap.count(accessID));
 
-    const bool skipSpecializedHaloWarps =
-        (maxExtentsStages[1].Minus != 0 || maxExtentsStages[1].Plus != 0) ? true : false;
-
-    const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
-    auto overExtents = iir::Extents::diff(maxExtents, maxExtentsStages);
-
-    auto ijcacheFillLogic = [&]() {
-      int jFillSize = -maxExtents[1].Minus + maxExtents[1].Plus;
-      int nJReps = (jFillSize + (int)blockSize_[1] + 1) / (int)blockSize_[1];
-
-      for(int i = 0; i < nJReps - 1; ++i) {
-        int jOffset = i * (blockSize_[1] + maxExtentsStages[1].Plus - maxExtentsStages[1].Minus);
-
-        generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
-        cudaKernel.addBlockStatement(
-            "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
-            [&]() {
-              generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
-                                       {(int)blockSize_[0], jOffset, 0});
-            });
-      }
-
-      int jOffset = (nJReps - 1) * blockSize_[1];
-      cudaKernel.addBlockStatement(
-          "if(threadIdx.y +" + std::to_string(jOffset) + "< " +
-              std::to_string(blockSize_[1] - overExtents[1].Minus + overExtents[1].Plus) + ")",
-          [&]() {
-            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
-            cudaKernel.addBlockStatement(
-                "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) +
-                    ")",
-                [&]() {
-                  generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
-                                           {(int)blockSize_[0], jOffset, 0});
-                });
-
-          });
-    };
-
-    if(skipSpecializedHaloWarps) {
-      int jwarp_limit = (int)blockSize_[1] + overExtents[1].Plus - overExtents[1].Minus;
-      cudaKernel.addBlockStatement("if(threadIdx.y  < " + std::to_string(jwarp_limit) + ")",
-                                   ijcacheFillLogic);
-    } else {
-      ijcacheFillLogic();
+    if(fieldIndexMap.at(accessID) != Array3i{1, 1, 1}) {
+      continue;
     }
+    generateFillIJCache(cudaKernel, cache, fieldIndexMap);
   }
   cudaKernel.addStatement("__syncthreads()");
 }
+
+void MSCodeGen::generateFill2DIJCaches(
+    MemberFunction& cudaKernel, const iir::Interval& interval,
+    const std::unordered_map<int, Array3i>& fieldIndexMap) const {
+  bool isThere3Dcache = false;
+  bool isThere2Dcache = false;
+  for(const auto& cachePair : ms_->getCaches()) {
+    const int accessID = cachePair.first;
+    const auto& cache = cachePair.second;
+
+    // TODO this is wrong, the interval of the access is not necessarily the interval where the
+    // cache requires a fill. This has to be properly handled by the PassSetCaches, allowing to set
+    // multiple caches on several intervals for the same accessID
+    const auto cacheInterval = ms_->getField(accessID).getInterval();
+    if(cache.getCacheIOPolicy() != iir::Cache::CacheIOPolicy::fill ||
+       cache.getCacheType() != iir::Cache::CacheTypeKind::IJ) {
+      continue;
+    }
+    if(!cacheInterval.overlaps(interval)) {
+      continue;
+    }
+
+    assert(fieldIndexMap.count(accessID));
+
+    if(fieldIndexMap.at(accessID) == Array3i{1, 1, 0}) {
+      if(!isThere2Dcache) {
+        cudaKernel.addComment("Generate fill of 2D caches");
+        isThere2Dcache = true;
+      }
+      generateFillIJCache(cudaKernel, cache, fieldIndexMap);
+    } else {
+      isThere3Dcache = true;
+    }
+  }
+  // if there are no caches filled within the k-loop, we need to synchronize now
+  if(!isThere3Dcache) {
+    cudaKernel.addStatement("__syncthreads()");
+  }
+}
+
+void MSCodeGen::generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache& cache,
+                                    const std::unordered_map<int, Array3i>& fieldIndexMap) const {
+
+  const int accessID = cache.getCachedFieldAccessID();
+  iir::Extents maxExtentsStages = ms_->computeMaxExtentStages();
+
+  const bool skipSpecializedHaloWarps =
+      (maxExtentsStages[1].Minus != 0 || maxExtentsStages[1].Plus != 0) ? true : false;
+
+  const auto& maxExtents = cacheProperties_.getCacheExtent(accessID);
+  auto overExtents = iir::Extents::diff(maxExtents, maxExtentsStages);
+
+  const int cudaBlockSizeJ =
+      static_cast<int>(blockSize_[1]) + maxExtentsStages[1].Plus - maxExtentsStages[1].Minus;
+  const int jFillSize = static_cast<int>(blockSize_[1]) - maxExtents[1].Minus + maxExtents[1].Plus;
+
+  auto ijcacheFillLogic = [&]() {
+    int nJReps = (jFillSize + cudaBlockSizeJ + 1) / cudaBlockSizeJ;
+
+    for(int i = 0; i < nJReps - 1; ++i) {
+      int jOffset = i * cudaBlockSizeJ;
+      generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+      cudaKernel.addBlockStatement(
+          "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
+          [&]() {
+            generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
+                                     {static_cast<int>(blockSize_[0]), jOffset, 0});
+          });
+    }
+
+    int jOffset = (nJReps - 1) * cudaBlockSizeJ;
+    cudaKernel.addBlockStatement(
+        "if(threadIdx.y +" + std::to_string(jOffset) + "< " + std::to_string(jFillSize) + ")",
+        [&]() {
+          generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+          cudaKernel.addBlockStatement(
+              "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
+              [&]() {
+                generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
+                                         {static_cast<int>(blockSize_[0]), jOffset, 0});
+              });
+
+        });
+  };
+
+  if(skipSpecializedHaloWarps) {
+    int jwarp_limit = (int)blockSize_[1] + overExtents[1].Plus - overExtents[1].Minus;
+    cudaKernel.addBlockStatement("if(threadIdx.y  < " + std::to_string(jwarp_limit) + ")",
+                                 ijcacheFillLogic);
+  } else {
+    ijcacheFillLogic();
+  }
+}
+
 void MSCodeGen::generateFillKCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
                                     const std::unordered_map<int, Array3i>& fieldIndexMap) const {
   cudaKernel.addComment("Head fill of kcaches");
@@ -1114,6 +1164,8 @@ void MSCodeGen::generateCudaKernelCode() {
     if(!solveKLoopInParallel_) {
       generatePreFillKCaches(cudaKernel, interval, fieldIndexMap);
     }
+
+    generateFill2DIJCaches(cudaKernel, interval, fieldIndexMap);
 
     // for each interval, we generate naive nested loops
     cudaKernel.addBlockStatement(makeKLoop("dom", interval, solveKLoopInParallel_), [&]() {
