@@ -414,7 +414,7 @@ void MSCodeGen::generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache
   const int jFillSize = static_cast<int>(blockSize_[1]) - maxExtents[1].Minus + maxExtents[1].Plus;
 
   auto ijcacheFillLogic = [&]() {
-    int nJReps = (jFillSize + cudaBlockSizeJ + 1) / cudaBlockSizeJ;
+    int nJReps = (jFillSize + cudaBlockSizeJ - 1) / cudaBlockSizeJ;
 
     for(int i = 0; i < nJReps - 1; ++i) {
       int jOffset = i * cudaBlockSizeJ;
