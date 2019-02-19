@@ -174,6 +174,7 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
       for(const auto& stage : MS.getChildren()) {
         for(const auto& fieldPair : stage->getFields()) {
           const iir::Field& field = fieldPair.second;
+          const auto& fieldInfo = stencil.getField(field.getAccessID());
 
           // Field is already cached, skip
           if(MS.isCached(field.getAccessID())) {
@@ -203,8 +204,11 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
               }
             }
           } else {
+            // We only cache in shared memory input data, that is not pointwise and IJ or IJK fields
             if((field.getIntend() == iir::Field::IK_Input) &&
-               !field.getExtents().isHorizontalPointwise()) {
+               !field.getExtents().isHorizontalPointwise() &&
+               (fieldInfo.Dimensions == Array3i{1, 1, 0} ||
+                fieldInfo.Dimensions == Array3i{1, 1, 1})) {
               // TODO we need to be able to set multilpe cache per ID. For the same ID sometimes we
               // might need to fill or local in different intervals
               iir::Cache& cache =

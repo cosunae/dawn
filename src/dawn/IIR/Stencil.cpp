@@ -138,6 +138,11 @@ bool Stencil::Lifetime::overlaps(const Stencil::Lifetime& other) const {
   return lowerBoundOverlap && upperBoundOverlap;
 }
 
+const Stencil::FieldInfo& Stencil::getField(const int accessID) const {
+  assert(derivedInfo_.fields_.count(accessID));
+  return derivedInfo_.fields_.at(accessID);
+}
+
 sir::Attr& Stencil::getStencilAttributes() { return stencilAttributes_; }
 
 Stencil::Stencil(StencilInstantiation& stencilInstantiation, sir::Attr attributes, int StencilID)

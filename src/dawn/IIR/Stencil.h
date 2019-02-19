@@ -284,6 +284,9 @@ public:
   /// @brief Get the pair <AccessID, field> for the fields used within the multi-stage
   const std::unordered_map<int, FieldInfo>& getFields() const { return derivedInfo_.fields_; }
 
+  /// @brief Get a field info
+  const FieldInfo& getField(const int accessID) const;
+
   std::unordered_map<int, Field> computeFieldsOnTheFly() const;
 
   /// @brief update the derived info from children
