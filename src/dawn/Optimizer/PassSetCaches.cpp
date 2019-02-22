@@ -174,7 +174,6 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
       for(const auto& stage : MS.getChildren()) {
         for(const auto& fieldPair : stage->getFields()) {
           const iir::Field& field = fieldPair.second;
-          const auto& fieldInfo = stencil.getField(field.getAccessID());
 
           // Field is already cached, skip
           if(MS.isCached(field.getAccessID())) {
@@ -185,6 +184,10 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
           if(!field.getExtents().isVerticalPointwise()) {
             continue;
           }
+
+          //TODO HACK we need to be able to figure out what tree is not updated here and remove that
+          stencil.updateFromChildren();
+          const auto& fieldInfo = stencil.getField(field.getAccessID());
 
           // Cache temporaries as local cache
           if(instantiation->isTemporaryField(field.getAccessID())) {
