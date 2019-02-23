@@ -19,6 +19,7 @@
 #include "dawn/IIR/StencilInstantiation.h"
 #include "dawn/Optimizer/OptimizerContext.h"
 #include "dawn/Support/Unreachable.h"
+
 #include <iostream>
 #include <set>
 #include <vector>
@@ -158,7 +159,7 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
   for(const auto& stencilPtr : instantiation->getStencils()) {
     iir::Stencil& stencil = *stencilPtr;
 
-    // Set IJ-Caches
+    // Set IJ-Caches local
     int msIdx = 0;
     for(const auto& multiStagePtr : stencil.getChildren()) {
 
@@ -174,66 +175,95 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
       for(const auto& stage : MS.getChildren()) {
         for(const auto& fieldPair : stage->getFields()) {
           const iir::Field& field = fieldPair.second;
+          const auto& msField = MS.getField(field.getAccessID());
+          const int accessID = field.getAccessID();
 
           // Field is already cached, skip
-          if(MS.isCached(field.getAccessID())) {
+          if(MS.isCached(accessID)) {
             continue;
           }
 
           // Field has vertical extents, can't be ij-cached
-          if(!field.getExtents().isVerticalPointwise()) {
+          if(!msField.getExtents().isVerticalPointwise()) {
             continue;
           }
 
-          //TODO HACK we need to be able to figure out what tree is not updated here and remove that
-          stencil.updateFromChildren();
-          const auto& fieldInfo = stencil.getField(field.getAccessID());
-
           // Cache temporaries as local cache
-          if(instantiation->isTemporaryField(field.getAccessID())) {
+          if(instantiation->isTemporaryField(accessID)) {
             if(field.getIntend() == iir::Field::IK_Input &&
-               outputFields.count(field.getAccessID()) &&
+               outputFields.count(accessID) &&
                !field.getExtents().isHorizontalPointwise()) {
 
               iir::Cache& cache =
-                  MS.setCache(iir::Cache::IJ, iir::Cache::local, field.getAccessID());
+                  MS.setCache(iir::Cache::IJ, iir::Cache::local, accessID);
 
               if(context->getOptions().ReportPassSetCaches) {
                 std::cout << "\nPASS: " << getName() << ": " << instantiation->getName() << ": MS"
                           << msIdx << ": "
-                          << instantiation->getOriginalNameFromAccessID(field.getAccessID()) << ":"
+                          << instantiation->getOriginalNameFromAccessID(accessID) << ":"
                           << cache.getCacheTypeAsString() << ":" << cache.getCacheIOPolicyAsString()
                           << std::endl;
               }
             }
-          } else {
-            // We only cache in shared memory input data, that is not pointwise and IJ or IJK fields
-            if((field.getIntend() == iir::Field::IK_Input) &&
-               !field.getExtents().isHorizontalPointwise() &&
-               (fieldInfo.Dimensions == Array3i{1, 1, 0} ||
-                fieldInfo.Dimensions == Array3i{1, 1, 1})) {
-              // TODO we need to be able to set multilpe cache per ID. For the same ID sometimes we
-              // might need to fill or local in different intervals
-              iir::Cache& cache =
-                  MS.setCache(iir::Cache::IJ, iir::Cache::fill, field.getAccessID());
-
-              // TODO unify report with previous one
-              if(context->getOptions().ReportPassSetCaches) {
-                std::cout << "\nPASS: " << getName() << ": " << instantiation->getName() << ": MS"
-                          << msIdx << ": "
-                          << instantiation->getOriginalNameFromAccessID(field.getAccessID()) << ":"
-                          << cache.getCacheTypeAsString() << ":" << cache.getCacheIOPolicyAsString()
-                          << std::endl;
-              }
-            }
-          }
+          } 
 
           if(isOutput(field))
-            outputFields.insert(field.getAccessID());
+            outputFields.insert(accessID);
         }
       }
       msIdx++;
     }
+
+
+    // Set IJ-Caches fill
+    msIdx = 0;
+    for(const auto& multiStagePtr : stencil.getChildren()) {
+
+      iir::MultiStage& MS = *(multiStagePtr);
+
+      for(const auto& fieldPair : MS.getFields()) {
+        const iir::Field& field = fieldPair.second;
+
+        // Field is already cached, skip
+        if(MS.isCached(field.getAccessID())) {
+          continue;
+        }
+
+        // Field has vertical extents, can't be ij-cached
+        if(!field.getExtents().isVerticalPointwise() || field.getExtents().isHorizontalPointwise()) {
+          continue;
+        }
+
+        if(instantiation->isTemporaryField(field.getAccessID() || (field.getIntend() != iir::Field::IK_Input))) {
+          continue;
+        } 
+
+        //TODO HACK we need to be able to figure out what tree is not updated here and remove that
+        stencil.updateFromChildren();
+        const auto& fieldInfo = stencil.getField(field.getAccessID());
+
+        // We only cache in shared memory input data, that is not pointwise and IJ or IJK fields
+        if((fieldInfo.Dimensions == Array3i{1, 1, 0} ||
+            fieldInfo.Dimensions == Array3i{1, 1, 1}) ) {
+          // TODO we need to be able to set multilpe cache per ID. For the same ID sometimes we
+          // might need to fill or local in different intervals
+          iir::Cache& cache =
+                MS.setCache(iir::Cache::IJ, iir::Cache::fill, field.getAccessID());
+
+              // TODO unify report with previous one
+          if(context->getOptions().ReportPassSetCaches) {
+              std::cout << "\nPASS: " << getName() << ": " << instantiation->getName() << ": MS"
+                      << msIdx << ": "
+                      << instantiation->getOriginalNameFromAccessID(field.getAccessID()) << ":"
+                      << cache.getCacheTypeAsString() << ":" << cache.getCacheIOPolicyAsString() << " " << field.getExtents() 
+                      << std::endl;
+            }
+          }
+        }
+      msIdx++;
+    }
+
+
 
     // Set K-Caches
     if(!context->getOptions().DisableKCaches ||
