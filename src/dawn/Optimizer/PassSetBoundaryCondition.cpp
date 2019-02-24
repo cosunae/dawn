@@ -13,10 +13,10 @@
 //===------------------------------------------------------------------------------------------===//
 
 #include "dawn/Optimizer/PassSetBoundaryCondition.h"
-#include "dawn/Optimizer/OptimizerContext.h"
-#include "dawn/IIR/Stencil.h"
 #include "dawn/IIR/IIRNodeIterator.h"
+#include "dawn/IIR/Stencil.h"
 #include "dawn/IIR/StencilInstantiation.h"
+#include "dawn/Optimizer/OptimizerContext.h"
 #include "dawn/SIR/ASTExpr.h"
 #include "dawn/SIR/ASTStmt.h"
 #include "dawn/SIR/ASTUtil.h"
@@ -317,6 +317,10 @@ bool PassSetBoundaryCondition::run(
     // Write all the fields set to dirty within this stencil to the global dirty map
     for(const auto& fieldWithExtends : stencilDirtyFields) {
       insertExtentsIntoMap(fieldWithExtends.first, fieldWithExtends.second, dirtyFields);
+    }
+
+    for(auto& doMethod : iterateIIROver<iir::DoMethod>(stencil)) {
+      doMethod->update(iir::NodeUpdateType::level);
     }
   }
 

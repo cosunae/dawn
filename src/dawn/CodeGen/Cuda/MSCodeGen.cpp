@@ -70,7 +70,7 @@ void MSCodeGen::generateIJCacheDecl(MemberFunction& kernel) const {
     kernel.addStatement("__shared__ gridtools::clang::float_type " +
                         cacheProperties_.getCacheName(accessID) + "[" +
                         std::to_string(cacheProperties_.getCacheDimLength(accessID, 0)) + "*" +
-                        std::to_string(cacheProperties_.getCacheDimLength(accessID, 1)) + "]");
+                        std::to_string(cacheProperties_.getCacheDimLength(accessID, 1)) + "*2]");
   }
 }
 
@@ -103,6 +103,7 @@ void MSCodeGen::generateIJCacheIndexInit(MemberFunction& kernel) const {
         " + (jblock + " + std::to_string(cacheProperties_.getOffsetCommonIJCache(1)) + ")*" +
         std::to_string(cacheProperties_.getStrideCommonCache(1, blockSize_)));
   }
+  kernel.addStatement("int cIJCachePos = 0");
 }
 
 iir::Interval::IntervalLevel
@@ -308,7 +309,7 @@ std::string MSCodeGen::makeLoopImpl(const iir::Extent extent, const std::string&
 
 void MSCodeGen::generateFillIJCachesStmt(MemberFunction& cudaKernel, const int accessID,
                                          const std::unordered_map<int, Array3i>& fieldIndexMap,
-                                         const Array3i offset) const {
+                                         const Array3i offset, const int koffset) const {
 
   std::stringstream ss;
   std::string accessName = cacheProperties_.getCacheName(accessID);
@@ -320,18 +321,22 @@ void MSCodeGen::generateFillIJCachesStmt(MemberFunction& cudaKernel, const int a
   ss << accessName
      << "[threadIdx.x+" + std::to_string(offset[0]) + "+(threadIdx.y+" + std::to_string(offset[1]) +
             ")*"
-     << std::to_string(cacheProperties_.getCacheDimLength(accessID, 0)) << "]=";
+     << std::to_string(cacheProperties_.getCacheDimLength(accessID, 0)) << "+"
+     << std::to_string(cacheProperties_.getCacheDimLength(accessID, 0) *
+                       cacheProperties_.getCacheDimLength(accessID, 1) * koffset)
+     << "]=";
 
   CodeGeneratorHelper::generateFieldAccessDeref(
       ss, ms_, stencilInstantiation_, accessID, fieldIndexMap,
-      {maxExtents[0].Minus + offset[0], overExtents[1].Minus + offset[1]}, false);
+      {maxExtents[0].Minus + offset[0], overExtents[1].Minus + offset[1], koffset}, false);
 
   cudaKernel.addStatement(ss.str());
 }
 
 // TODO need to move fieldIndexMap into iir::Field
 void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
-                                     const std::unordered_map<int, Array3i>& fieldIndexMap) const {
+                                     const std::unordered_map<int, Array3i>& fieldIndexMap,
+                                     const int klev) const {
   for(const auto& cachePair : ms_->getCaches()) {
     const int accessID = cachePair.first;
     const auto& cache = cachePair.second;
@@ -353,7 +358,7 @@ void MSCodeGen::generateFillIJCaches(MemberFunction& cudaKernel, const iir::Inte
     if(fieldIndexMap.at(accessID) != Array3i{1, 1, 1}) {
       continue;
     }
-    generateFillIJCache(cudaKernel, cache, fieldIndexMap);
+    generateFillIJCache(cudaKernel, cache, fieldIndexMap, klev);
   }
   cudaKernel.addStatement("__syncthreads()");
 }
@@ -386,7 +391,7 @@ void MSCodeGen::generateFill2DIJCaches(
         cudaKernel.addComment("Generate fill of 2D caches");
         isThere2Dcache = true;
       }
-      generateFillIJCache(cudaKernel, cache, fieldIndexMap);
+      generateFillIJCache(cudaKernel, cache, fieldIndexMap, 0);
     } else {
       isThere3Dcache = true;
     }
@@ -398,7 +403,8 @@ void MSCodeGen::generateFill2DIJCaches(
 }
 
 void MSCodeGen::generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache& cache,
-                                    const std::unordered_map<int, Array3i>& fieldIndexMap) const {
+                                    const std::unordered_map<int, Array3i>& fieldIndexMap,
+                                    const int klev) const {
 
   const int accessID = cache.getCachedFieldAccessID();
   iir::Extents maxExtentsStages = ms_->computeMaxExtentStages();
@@ -418,12 +424,12 @@ void MSCodeGen::generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache
 
     for(int i = 0; i < nJReps - 1; ++i) {
       int jOffset = i * cudaBlockSizeJ;
-      generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+      generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0}, klev);
       cudaKernel.addBlockStatement(
           "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
           [&]() {
             generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
-                                     {static_cast<int>(blockSize_[0]), jOffset, 0});
+                                     {static_cast<int>(blockSize_[0]), jOffset, 0}, klev);
           });
     }
 
@@ -431,12 +437,12 @@ void MSCodeGen::generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache
     cudaKernel.addBlockStatement(
         "if(threadIdx.y +" + std::to_string(jOffset) + "< " + std::to_string(jFillSize) + ")",
         [&]() {
-          generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0});
+          generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap, {0, jOffset, 0}, klev);
           cudaKernel.addBlockStatement(
               "if(threadIdx.x < " + std::to_string(-maxExtents[0].Minus + maxExtents[0].Plus) + ")",
               [&]() {
                 generateFillIJCachesStmt(cudaKernel, accessID, fieldIndexMap,
-                                         {static_cast<int>(blockSize_[0]), jOffset, 0});
+                                         {static_cast<int>(blockSize_[0]), jOffset, 0}, klev);
               });
 
         });
@@ -1167,6 +1173,8 @@ void MSCodeGen::generateCudaKernelCode() {
 
     generateFill2DIJCaches(cudaKernel, interval, fieldIndexMap);
 
+    generateFillIJCaches(cudaKernel, interval, fieldIndexMap, 0);
+
     // for each interval, we generate naive nested loops
     cudaKernel.addBlockStatement(makeKLoop("dom", interval, solveKLoopInParallel_), [&]() {
 
@@ -1174,7 +1182,7 @@ void MSCodeGen::generateCudaKernelCode() {
         generateFillKCaches(cudaKernel, interval, fieldIndexMap);
       }
 
-      generateFillIJCaches(cudaKernel, interval, fieldIndexMap);
+      generateFillIJCaches(cudaKernel, interval, fieldIndexMap, 1);
 
       for(const auto& stagePtr : ms_->getChildren()) {
         const iir::Stage& stage = *stagePtr;

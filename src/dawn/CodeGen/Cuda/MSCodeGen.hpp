@@ -94,17 +94,19 @@ private:
                               const std::unordered_map<int, Array3i>& fieldIndexMap) const;
 
   void generateFillIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
-                            const std::unordered_map<int, Array3i>& fieldIndexMap) const;
+                            const std::unordered_map<int, Array3i>& fieldIndexMap,
+                            const int klev) const;
 
   void generateFill2DIJCaches(MemberFunction& cudaKernel, const iir::Interval& interval,
                               const std::unordered_map<int, Array3i>& fieldIndexMap) const;
 
   void generateFillIJCache(MemberFunction& cudaKernel, const iir::Cache& cache,
-                           const std::unordered_map<int, Array3i>& fieldIndexMap) const;
+                           const std::unordered_map<int, Array3i>& fieldIndexMap,
+                           const int klev) const;
 
   void generateFillIJCachesStmt(MemberFunction& cudaKernel, const int accessID,
                                 const std::unordered_map<int, Array3i>& fieldIndexMap,
-                                const Array3i offset) const;
+                                const Array3i offset, const int koffset) const;
 
   /// @brief generate a fill of the top level of the kcache, at every k iteration
   void generateFillKCaches(MemberFunction& cudaKernel, const iir::Interval& interval,

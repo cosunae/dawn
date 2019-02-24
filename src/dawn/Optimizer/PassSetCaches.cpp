@@ -14,6 +14,7 @@
 
 #include "dawn/Optimizer/PassSetCaches.h"
 #include "dawn/IIR/Cache.h"
+#include "dawn/IIR/IIRNodeIterator.h"
 #include "dawn/IIR/IntervalAlgorithms.h"
 #include "dawn/IIR/StatementAccessesPair.h"
 #include "dawn/IIR/StencilInstantiation.h"
@@ -158,6 +159,9 @@ bool PassSetCaches::run(const std::shared_ptr<iir::StencilInstantiation>& instan
   for(const auto& stencilPtr : instantiation->getStencils()) {
     iir::Stencil& stencil = *stencilPtr;
 
+    for(auto& doM : iterateIIROver<iir::DoMethod>(stencil)) {
+      doM->update(iir::NodeUpdateType::levelAndTreeAbove);
+    }
     // Set IJ-Caches
     int msIdx = 0;
     for(const auto& multiStagePtr : stencil.getChildren()) {
