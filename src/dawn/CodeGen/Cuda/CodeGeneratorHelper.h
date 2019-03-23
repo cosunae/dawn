@@ -57,10 +57,14 @@ public:
   static std::vector<iir::Interval>
   computePartitionOfIntervals(const std::unique_ptr<iir::MultiStage>& ms);
 
+  /// @brief determines whether for code generation, using temporaries will be required.
+  /// Even if the stencil contains temporaries, in some cases, like when they are local cached, they
+  /// are not required for code generation. Also in the case of no redundant computations,
+  /// temporaries will become normal fields
   static bool
   useTemporaries(const std::unique_ptr<iir::Stencil>& stencil,
-                 const iir::StencilMetaInformation& metadata);
 
+                 const iir::StencilMetaInformation& metadata);
   /// @brief computes the maximum extent required by all temporaries, which will be used for proper
   /// allocation
   static iir::Extents computeTempMaxWriteExtent(iir::Stencil const& stencil);

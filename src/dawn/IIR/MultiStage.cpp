@@ -419,7 +419,7 @@ json::json MultiStage::jsonDump() const {
 
   json::json cachesJson;
   for(const auto& cache : derivedInfo_.caches_) {
-    cachesJson.push_back(cache.second.jsonDump());
+    cachesJson[cache.first] = cache.second.jsonDump();
   }
   node["Caches"] = cachesJson;
 
@@ -430,6 +430,25 @@ json::json MultiStage::jsonDump() const {
   }
   return node;
 }
+
+bool MultiStage::hasMemAccessTemporaries() const {
+  for(const auto& field : derivedInfo_.fields_) {
+    if(isMemAccessTemporary(field.first)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool MultiStage::isMemAccessTemporary(const int accessID) const {
+  if(!stencilInstantiation_.isTemporaryField(accessID))
+    return false;
+  if(!derivedInfo_.caches_.count(accessID))
+    return true;
+  return (derivedInfo_.caches_.at(accessID).requiresMemMemoryAccess());
+}
+bool MultiStage::hasField(const int accessID) const { return derivedInfo_.fields_.count(accessID); }
+
 
 bool MultiStage::hasField(const int accessID) const { return derivedInfo_.fields_.count(accessID); }
 

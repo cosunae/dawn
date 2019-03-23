@@ -524,14 +524,9 @@ void IIRSerializer::deserializeMetaData(std::shared_ptr<iir::StencilInstantiatio
   }
 
   for(auto variableVersionMap : protoMetaData.versionedfields().variableversionmap()) {
-    std::shared_ptr<std::vector<int>> versions = std::make_shared<std::vector<int>>();
     for(auto versionedID : variableVersionMap.second.allids()) {
-      versions->push_back(versionedID);
-      metadata.fieldAccessMetadata_.variableVersions_.versionIDs_.insert(versionedID);
-      metadata.fieldAccessMetadata_.variableVersions_.versionToOriginalVersionMap_.emplace(
-          versionedID, variableVersionMap.first);
+      metadata.variableVersions_.insertIDPair(variableVersionMap.first, versionedID);
     }
-    metadata.fieldAccessMetadata_.variableVersions_.insert(variableVersionMap.first, versions);
   }
 
   for(auto IDToCall : protoMetaData.idtostencilcall()) {
