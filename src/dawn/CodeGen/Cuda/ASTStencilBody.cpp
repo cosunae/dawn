@@ -109,8 +109,14 @@ void ASTStencilBody::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
     return;
   }
 
-  CodeGeneratorHelper::generateFieldAccessDeref(ss_, ms_, metadata_, accessID, fieldIndexMap_,
-                                                expr->getOffset());
+  if(metadata_.isAccessType(iir::FieldAccessType::FAT_LocalVariable, accessID)) {
+    DAWN_ASSERT(expr->getOffset()[0] == 0 && expr->getOffset()[1] == 0 &&
+                expr->getOffset()[2] == 0);
+    ss_ << metadata_.getFieldNameFromAccessID(accessID);
+  } else {
+    CodeGeneratorHelper::generateFieldAccessDeref(ss_, ms_, metadata_, accessID, fieldIndexMap_,
+                                                  expr->getOffset());
+  }
 }
 
 void ASTStencilBody::derefIJCache(const std::shared_ptr<FieldAccessExpr>& expr) {
