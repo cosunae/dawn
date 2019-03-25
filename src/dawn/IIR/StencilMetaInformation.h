@@ -57,7 +57,7 @@ public:
   /// @brief Check whether the `AccessID` corresponds to a multi-versioned field
   bool isMultiVersionedField(int AccessID) const {
     return isAccessType(FieldAccessType::FAT_Field, AccessID) &&
-           fieldAccessMetadata_.variableVersions_.hasVariableMultipleVersions(AccessID);
+           fieldAccessMetadata_.variableVersions_.hasMultipleVariableVersions(AccessID);
   }
 
   int getOriginalVersionOfAccessID(const int accessID) const {

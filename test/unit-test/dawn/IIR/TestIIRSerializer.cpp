@@ -15,6 +15,8 @@
 #include "dawn/Compiler/DiagnosticsEngine.h"
 #include "dawn/Compiler/Options.h"
 #include "dawn/IIR/IIR.h"
+#include "dawn/IIR/StatementAccessesPair.h"
+#include "dawn/IIR/StencilInstantiation.h"
 #include "dawn/Optimizer/OptimizerContext.h"
 #include "dawn/Serialization/IIRSerializer.h"
 #include <gtest/gtest.h>
@@ -231,9 +233,9 @@ TEST_F(IIRSerializerTest, SimpleDataStructures) {
   referenceInstantiaton->getMetaData().fieldAccessMetadata_.GlobalVariableAccessIDSet_.emplace(712);
   IIR_EXPECT_EQ(serializeAndDeserializeRef(), referenceInstantiaton);
 
-  referenceInstantiaton->getMetaData().variableVersions_.insertIDPair(5, 6);
-  referenceInstantiaton->getMetaData().variableVersions_.insertIDPair(5, 7);
-  referenceInstantiaton->getMetaData().variableVersions_.insertIDPair(5, 8);
+  referenceInstantiaton->getMetaData().fieldAccessMetadata_.variableVersions_.insertIDPair(5, 6);
+  referenceInstantiaton->getMetaData().fieldAccessMetadata_.variableVersions_.insertIDPair(5, 7);
+  referenceInstantiaton->getMetaData().fieldAccessMetadata_.variableVersions_.insertIDPair(5, 8);
   IIR_EXPECT_EQ(serializeAndDeserializeRef(), referenceInstantiaton);
 
   referenceInstantiaton->getMetaData().fileName_ = "fileName";

@@ -255,7 +255,7 @@ void IIRSerializer::serializeMetaData(proto::iir::StencilInstantiation& target,
   auto protoVariableVersions = protoMetaData->mutable_versionedfields();
   auto& protoVariableVersionMap = *protoVariableVersions->mutable_variableversionmap();
   auto variableVersions = metaData.fieldAccessMetadata_.variableVersions_;
-  for(auto& IDtoVectorOfVersionsPair : variableVersions.variableVersionsMap_) {
+  for(auto& IDtoVectorOfVersionsPair : variableVersions.getvariableVersionsMap()) {
     proto::iir::AllVersionedFields protoFieldVersions;
     for(int id : *(IDtoVectorOfVersionsPair.second)) {
       protoFieldVersions.add_allids(id);
@@ -525,7 +525,8 @@ void IIRSerializer::deserializeMetaData(std::shared_ptr<iir::StencilInstantiatio
 
   for(auto variableVersionMap : protoMetaData.versionedfields().variableversionmap()) {
     for(auto versionedID : variableVersionMap.second.allids()) {
-      metadata.variableVersions_.insertIDPair(variableVersionMap.first, versionedID);
+      metadata.fieldAccessMetadata_.variableVersions_.insertIDPair(variableVersionMap.first,
+                                                                   versionedID);
     }
   }
 

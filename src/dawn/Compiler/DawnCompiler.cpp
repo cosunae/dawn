@@ -166,6 +166,7 @@ std::unique_ptr<OptimizerContext> DawnCompiler::runOptimizer(std::shared_ptr<SIR
   optimizer->checkAndPushBack<PassInlining>(true, PassInlining::IK_InlineProcedures);
   optimizer->checkAndPushBack<PassFieldVersioning>(
       PassFieldVersioning::FieldVersioningPassMode::FM_CreateVersion);
+// TODO undo this
 //  optimizer->checkAndPushBack<PassTemporaryFirstAccess>();
   optimizer->checkAndPushBack<PassSSA>();
   optimizer->checkAndPushBack<PassMultiStageSplitter>(mssSplitStrategy);

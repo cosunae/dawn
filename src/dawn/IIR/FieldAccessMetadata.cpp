@@ -30,7 +30,7 @@ json::json VariableVersions::jsonDump() const {
   }
   node["versions"] = versionMap;
   json::json versionID;
-  for(const int id : versionIDs_) {
+  for(const int id : getVersionIDs()) {
     versionID.push_back(id);
   }
   node["versionIDs"] = versionID;
@@ -44,8 +44,11 @@ void FieldAccessMetadata::clone(const FieldAccessMetadata& origin) {
   apiFieldIDs_ = origin.apiFieldIDs_;
   TemporaryFieldAccessIDSet_ = origin.TemporaryFieldAccessIDSet_;
   GlobalVariableAccessIDSet_ = origin.GlobalVariableAccessIDSet_;
-  for(auto id : origin.variableVersions_.getVersionIDs()) {
-    variableVersions_.insert(id, origin.variableVersions_.getVersions(id));
+  for(auto idToVersionsPair : origin.variableVersions_.getvariableVersionsMap()) {
+    int originalID = idToVersionsPair.first;
+    for(auto versionID : *idToVersionsPair.second) {
+      variableVersions_.insertIDPair(originalID, versionID);
+    }
   }
 }
 } // namespace iir

@@ -92,10 +92,12 @@ int StencilInstantiation::createVersionAndRename(int AccessID, Stencil* stencil,
                                                  RenameDirection dir) {
   int newAccessID = nextUID();
 
+  auto& variableVersions = metadata_.fieldAccessMetadata_.variableVersions_;
+
   if(metadata_.isAccessType(FieldAccessType::FAT_Field, AccessID)) {
-    if(metadata_.fieldAccessMetadata_.variableVersions_.hasVariableMultipleVersions(AccessID)) {
+    if(variableVersions.hasMultipleVariableVersions(AccessID)) {
       // Field is already multi-versioned, append a new version
-      auto versions = metadata_.fieldAccessMetadata_.variableVersions_.getVersions(AccessID);
+      auto versions = variableVersions.getVersions(AccessID);
 
       // Set the second to last field to be a temporary (only the first and the last field will be
       // real storages, all other versions will be temporaries)
@@ -103,8 +105,8 @@ int StencilInstantiation::createVersionAndRename(int AccessID, Stencil* stencil,
       metadata_.fieldAccessMetadata_.TemporaryFieldAccessIDSet_.insert(lastAccessID);
       metadata_.eraseAllocatedField(lastAccessID);
 
-      int originalID = metadata_.variableVersions_.getOriginalVersionOfAccessID(lastAccessID);
-      const std::string& originalName = getFieldNameFromAccessID(originalID);
+      int originalID = variableVersions.getOriginalVersionOfAccessID(lastAccessID);
+      const std::string& originalName = metadata_.getFieldNameFromAccessID(originalID);
 
       // Register the new field
       metadata_.setAccessIDNamePairOfField(
@@ -112,27 +114,27 @@ int StencilInstantiation::createVersionAndRename(int AccessID, Stencil* stencil,
       metadata_.insertAllocatedField(newAccessID);
 
       // and register in field-versioning
-      metadata_.variableVersions_.insertIDPair(originalID, newAccessID);
+      variableVersions.insertIDPair(originalID, newAccessID);
 
-    } else if(metadata_.variableVersions_.isAccessIDAVersion(AccessID)) {
-      int originalID = metadata_.variableVersions_.getOriginalVersionOfAccessID(AccessID);
-      const std::string& originalName = getFieldNameFromAccessID(originalID);
+    } else if(variableVersions.isAccessIDAVersion(AccessID)) {
+      int originalID = variableVersions.getOriginalVersionOfAccessID(AccessID);
+      const std::string& originalName = metadata_.getFieldNameFromAccessID(originalID);
 
-      const auto versions = metadata_.variableVersions_.getVersions(originalID);
+      const auto versions = variableVersions.getVersions(originalID);
 
       // Set the second to last field to be a temporary (only the first and the last field will be
       // real storages, all other versions will be temporaries)
       int lastAccessID = versions->back();
-      metadata_.TemporaryFieldAccessIDSet_.insert(lastAccessID);
-      IIR_->getAllocatedFieldAccessIDSet().erase(lastAccessID);
+      metadata_.fieldAccessMetadata_.TemporaryFieldAccessIDSet_.insert(lastAccessID);
+      metadata_.fieldAccessMetadata_.AllocatedFieldAccessIDSet_.erase(lastAccessID);
 
       // Register the new field
-      setAccessIDNamePairOfField(newAccessID, originalName + "_" + std::to_string(versions->size()),
-                                 false);
-      IIR_->getAllocatedFieldAccessIDSet().insert(newAccessID);
+      metadata_.setAccessIDNamePairOfField(
+          newAccessID, originalName + "_" + std::to_string(versions->size()), false);
+      metadata_.fieldAccessMetadata_.AllocatedFieldAccessIDSet_.insert(newAccessID);
 
       // and register in field-versioning
-      metadata_.variableVersions_.insertIDPair(originalID, newAccessID);
+      variableVersions.insertIDPair(originalID, newAccessID);
     } else {
       const std::string& originalName = metadata_.getFieldNameFromAccessID(AccessID);
 
@@ -142,35 +144,34 @@ int StencilInstantiation::createVersionAndRename(int AccessID, Stencil* stencil,
       *versionsVecPtr = {AccessID, newAccessID};
 
       // Register the new field
-      setAccessIDNamePairOfField(newAccessID, originalName + "_0", false);
-      IIR_->getAllocatedFieldAccessIDSet().insert(newAccessID);
+      metadata_.setAccessIDNamePairOfField(newAccessID, originalName + "_0", false);
+      metadata_.insertAllocatedField(newAccessID);
 
       // and register in field-versioning
-      metadata_.variableVersions_.insertIDPair(AccessID, newAccessID);
+      variableVersions.insertIDPair(AccessID, newAccessID);
     }
   } else {
-    if(metadata_.variableVersions_.hasMultipleVariableVersions(AccessID)) {
+    if(variableVersions.hasMultipleVariableVersions(AccessID)) {
       // Variable is already multi-versioned, append a new version
-      int originalID = metadata_.variableVersions_.getOriginalVersionOfAccessID(AccessID);
-      const std::string& originalName = getFieldNameFromAccessID(originalID);
+      int originalID = variableVersions.getOriginalVersionOfAccessID(AccessID);
+      const std::string& originalName = metadata_.getFieldNameFromAccessID(originalID);
 
       // Register the new variable
-      setAccessIDNamePair(
+      metadata_.setAccessIDNamePair(
           newAccessID,
-          originalName + "_" +
-              std::to_string(metadata_.variableVersions_.getVersions(originalID)->size()));
+          originalName + "_" + std::to_string(variableVersions.getVersions(originalID)->size()));
 
       // and register in field-versioning
-      metadata_.variableVersions_.insertIDPair(AccessID, newAccessID);
+      variableVersions.insertIDPair(AccessID, newAccessID);
 
     } else {
       const std::string& originalName = metadata_.getFieldNameFromAccessID(AccessID);
 
       // Register the new variable
-      setAccessIDNamePair(newAccessID, originalName + "_0");
+      metadata_.setAccessIDNamePair(newAccessID, originalName + "_0");
 
       // and register in field-versioning
-      metadata_.variableVersions_.insertIDPair(AccessID, newAccessID);
+      variableVersions.insertIDPair(AccessID, newAccessID);
     }
   }
 

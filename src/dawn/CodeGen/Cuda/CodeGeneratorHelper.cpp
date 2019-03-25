@@ -130,9 +130,8 @@ bool CodeGeneratorHelper::hasAccessIDMemAccess(const int accessID,
   return false;
 }
 
-bool CodeGeneratorHelper::useTemporaries(
-    const std::unique_ptr<iir::Stencil>& stencil,
-    const iir::StencilMetaInformation& metadata) {
+bool CodeGeneratorHelper::useTemporaries(const std::unique_ptr<iir::Stencil>& stencil,
+                                         const iir::StencilMetaInformation& metadata) {
 
   const auto& fields = stencil->getFields();
   const bool containsMemTemporary =
@@ -154,6 +153,9 @@ void CodeGeneratorHelper::generateFieldAccessDeref(
     const std::unordered_map<int, Array3i> fieldIndexMap, Array3i offset) {
   std::string accessName = metadata.getFieldNameFromAccessID(accessID);
   bool isTemporary = metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary, accessID);
+  std::cout << "KKKK " << metadata.getNameFromAccessID(accessID) << " "
+            << metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary, accessID)
+            << std::endl;
   DAWN_ASSERT(fieldIndexMap.count(accessID) || isTemporary);
   const auto& field = ms->getField(accessID);
   bool useTmpIndex = isTemporary && useTemporaries(ms->getParent(), metadata);

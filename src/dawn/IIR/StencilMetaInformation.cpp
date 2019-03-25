@@ -246,7 +246,7 @@ void StencilMetaInformation::removeAccessID(int AccessID) {
   fieldAccessMetadata_.FieldAccessIDSet_.erase(AccessID);
   fieldAccessMetadata_.TemporaryFieldAccessIDSet_.erase(AccessID);
 
-  if(fieldAccessMetadata_.variableVersions_.hasVariableMultipleVersions(AccessID)) {
+  if(fieldAccessMetadata_.variableVersions_.hasMultipleVariableVersions(AccessID)) {
     auto versions = fieldAccessMetadata_.variableVersions_.getVersions(AccessID);
     versions->erase(std::remove_if(versions->begin(), versions->end(),
                                    [&](int AID) { return AID == AccessID; }),

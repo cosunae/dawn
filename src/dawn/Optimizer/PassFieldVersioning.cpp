@@ -96,9 +96,10 @@ static void addAssignmentToDoMethod(std::unique_ptr<iir::DoMethod>& domethod, in
                                     const std::shared_ptr<iir::StencilInstantiation>& context,
                                     boost::optional<iir::Extents>& readExtents) {
   // Create the StatementAccessPair of the assignment with the new and old variables
-  auto fa_assignee = std::make_shared<FieldAccessExpr>(context->getNameFromAccessID(assigneeID));
+  auto fa_assignee =
+      std::make_shared<FieldAccessExpr>(context->getMetaData().getNameFromAccessID(assigneeID));
   auto fa_assignment =
-      std::make_shared<FieldAccessExpr>(context->getNameFromAccessID(assignmentID));
+      std::make_shared<FieldAccessExpr>(context->getMetaData().getNameFromAccessID(assignmentID));
   auto assignmentExpression = std::make_shared<AssignmentExpr>(fa_assignment, fa_assignee, "=");
   auto expAssignment = std::make_shared<ExprStmt>(assignmentExpression);
   auto assignmentStatement = std::make_shared<Statement>(expAssignment, nullptr);
@@ -119,8 +120,8 @@ static void addAssignmentToDoMethod(std::unique_ptr<iir::DoMethod>& domethod, in
   domethod->insertChild(std::move(pair));
 
   // Add the new expressions to the map
-  context->mapExprToAccessID(fa_assignment, assignmentID);
-  context->mapExprToAccessID(fa_assignee, assigneeID);
+  context->getMetaData().mapExprToAccessID(fa_assignment, assignmentID);
+  context->getMetaData().mapExprToAccessID(fa_assignee, assigneeID);
 }
 
 /// @brief Creates the stage in which assignment happens (fill and flush)
@@ -130,8 +131,9 @@ createAssignmentStage(const iir::Interval& interval, int assignmentID, int assig
                       boost::optional<iir::Extents>& readExtents) {
   // Add the stage that assined the assingee to the assignment
   std::unique_ptr<iir::Stage> assignmentStage =
-      make_unique<iir::Stage>(*context, context->nextUID(), interval);
-  iir::Stage::DoMethodSmartPtr_t domethod = make_unique<iir::DoMethod>(interval, *context);
+      make_unique<iir::Stage>(context->getMetaData(), context->nextUID(), interval);
+  iir::Stage::DoMethodSmartPtr_t domethod =
+      make_unique<iir::DoMethod>(interval, context->getMetaData());
   domethod->clearChildren();
 
   addAssignmentToDoMethod(domethod, assignmentID, assigneeID, context, readExtents);
@@ -165,9 +167,9 @@ bool PassFieldVersioning::run(
         iir::MultiStage& multiStage = (**multiStageRit);
         iir::LoopOrderKind loopOrder = multiStage.getLoopOrder();
 
-      std::shared_ptr<iir::DependencyGraphAccesses> newGraph, oldGraph;
-      newGraph =
-          std::make_shared<iir::DependencyGraphAccesses>(stencilInstantiation->getMetaData());
+        std::shared_ptr<iir::DependencyGraphAccesses> newGraph, oldGraph;
+        newGraph =
+            std::make_shared<iir::DependencyGraphAccesses>(stencilInstantiation->getMetaData());
 
         // Iterate stages bottom -> top
         for(auto stageRit = multiStage.childrenRBegin(), stageRend = multiStage.childrenREnd();
@@ -182,9 +184,9 @@ bool PassFieldVersioning::run(
             auto& stmtAccessesPair = doMethod.getChildren()[stmtIndex];
             newGraph->insertStatementAccessesPair(stmtAccessesPair);
 
-          // Try to resolve race-conditions by using double buffering if necessary
-          auto rc = fixRaceCondition(stencilInstantiation, newGraph.get(), stencil, doMethod,
-                                     loopOrder, stageIdx, stmtIndex);
+            // Try to resolve race-conditions by using double buffering if necessary
+            auto rc = fixRaceCondition(stencilInstantiation, newGraph.get(), stencil, doMethod,
+                                       loopOrder, stageIdx, stmtIndex);
 
             if(rc == RCKind::RK_Unresolvable) {
               // Nothing we can do ... bail out
@@ -213,7 +215,8 @@ bool PassFieldVersioning::run(
     return true;
   } else if(mode_ == FieldVersioningPassMode::FM_FixAccess) {
     // check all versioned variables:
-    for(auto id : stencilInstantiation->getMetaData().variableVersions_.getVersionIDs()) {
+    for(auto id : stencilInstantiation->getMetaData()
+                      .fieldAccessMetadata_.variableVersions_.getVersionIDs()) {
       for(const auto& stencilPtr : stencilInstantiation->getStencils()) {
         iir::Stencil& stencil = *stencilPtr;
         for(const auto& mss : iterateIIROver<iir::MultiStage>(stencil)) {
@@ -229,14 +232,14 @@ bool PassFieldVersioning::run(
 
             // we create the new stage that holds these do-methods
             auto insertedStage = createAssignmentStage(
-                interval, id, stencilInstantiation->getOriginalVersionOfAccessID(id),
+                interval, id, stencilInstantiation->getMetaData().getOriginalVersionOfAccessID(id),
                 stencilInstantiation, extents);
             // and insert them at the beginnning of the MultiStage
             mss->insertChild(mss->childrenBegin(), std::move(insertedStage));
           }
           // update the mss: #TODO: this is still a workaround since we don't have level-and below:
-          for(const auto& domethods : iterateIIROver<iir::DoMethod>(*mss)){
-              domethods->update(iir::NodeUpdateType::levelAndTreeAbove);
+          for(const auto& domethods : iterateIIROver<iir::DoMethod>(*mss)) {
+            domethods->update(iir::NodeUpdateType::levelAndTreeAbove);
           }
         }
       }

@@ -441,15 +441,12 @@ bool MultiStage::hasMemAccessTemporaries() const {
 }
 
 bool MultiStage::isMemAccessTemporary(const int accessID) const {
-  if(!stencilInstantiation_.isTemporaryField(accessID))
+  if(!metadata_.isAccessType(FieldAccessType::FAT_StencilTemporary, accessID))
     return false;
   if(!derivedInfo_.caches_.count(accessID))
     return true;
   return (derivedInfo_.caches_.at(accessID).requiresMemMemoryAccess());
 }
-bool MultiStage::hasField(const int accessID) const { return derivedInfo_.fields_.count(accessID); }
-
-
 bool MultiStage::hasField(const int accessID) const { return derivedInfo_.fields_.count(accessID); }
 
 bool MultiStage::isEmptyOrNullStmt() const {

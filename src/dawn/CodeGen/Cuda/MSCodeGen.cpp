@@ -32,7 +32,7 @@ MSCodeGen::MSCodeGen(std::stringstream& ss, const std::unique_ptr<iir::MultiStag
       metadata_(stencilInstantiation->getMetaData()), cacheProperties_(cacheProperties),
       cudaKernelName_(CodeGeneratorHelper::buildCudaKernelName(stencilInstantiation_, ms_)),
       useCodeGenTemporaries_(
-          CodeGeneratorHelper::useTemporaries(ms->getParent(), stencilInstantiation) &&
+          CodeGeneratorHelper::useTemporaries(ms->getParent(), stencilInstantiation->getMetaData()) &&
           ms->hasMemAccessTemporaries()),
       blockSize_(stencilInstantiation_->getIIR()->getBlockSize()),
       solveKLoopInParallel_(CodeGeneratorHelper::solveKLoopInParallel(ms_)) {}
