@@ -30,7 +30,7 @@ namespace iir {
 class StencilInstantiation;
 class Stage;
 class Stencil;
-}
+} // namespace iir
 
 namespace codegen {
 namespace gt {
@@ -67,9 +67,8 @@ private:
   //  std::string generateGlobals(const std::shared_ptr<SIR>& Sir);
   std::string cacheWindowToString(const iir::Cache::window& cacheWindow);
 
-  void buildPlaceholderDefinitions(MemberFunction& function,
-      const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
-      const std::map<int, iir::Stencil::FieldInfo>& stencilFields,
+  void generatePlaceholderDefinitions(
+      Structure& function, const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
       const sir::GlobalVariableMap& globalsMap, const CodeGenProperties& codeGenProperties) const;
 
   std::string getFieldName(std::shared_ptr<sir::Field> const& f) const { return f->Name; }
@@ -107,10 +106,17 @@ private:
   generateStencilClasses(const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
                          Class& stencilWrapperClass, CodeGenProperties& codeGenProperties);
 
+  void generateGridConstruction(MemberFunction& stencilConstructor, const iir::Stencil& stencil,
+                                IntervalDefinitions& intervalDefinitions,
+                                const CodeGenProperties& codeGenProperties) const;
+
   /// code generate sync methods statements for all the fields passed
   void generateSyncStorages(
       MemberFunction& method,
       const IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& stencilFields) const;
+
+  static std::string getAxisName(const std::string& stencilName);
+  static std::string getGridName(const std::string& stencilName);
 
   /// construct a string of template parameters for storages
   std::vector<std::string> buildFieldTemplateNames(

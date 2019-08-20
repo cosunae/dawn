@@ -521,8 +521,9 @@ struct Structure : public Statement {
   ///   template< templateName >
   ///   Structure(...) {...}
   /// @endcode
-  MemberFunction addDestructor() {
-    return addMemberFunction(Twine::createNull(), Twine("~") + StructureName);
+  MemberFunction addDestructor(bool isvirtual) {
+    return addMemberFunction(Twine::createNull(),
+                             (isvirtual ? Twine("virtual ~") : Twine("~")) + StructureName);
   }
 
   /// @brief Add a member function (mehtod)
@@ -673,8 +674,9 @@ struct Struct : public Structure {
 auto c_gt = []() { return Twine("gridtools::"); };
 auto c_gtc = []() { return Twine("gridtools::clang::"); };
 auto c_gt_enum = []() { return Twine("gridtools::enumtype::"); };
+auto c_gt_intent = []() { return Twine("gridtools::intent::"); };
 
-} // namesapce codegen
+} // namespace codegen
 
 } // namespace dawn
 
