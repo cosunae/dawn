@@ -24,13 +24,11 @@
 
 namespace dawn {
 
-class OptimizerContext;
-
 namespace iir {
 class StencilInstantiation;
 class Stage;
 class Stencil;
-}
+} // namespace iir
 
 namespace codegen {
 namespace gt {
@@ -39,7 +37,8 @@ namespace gt {
 /// @ingroup gt
 class GTCodeGen : public CodeGen {
 public:
-  GTCodeGen(OptimizerContext* context);
+  GTCodeGen(stencilInstantiationContext& ctx, DiagnosticsEngine& engine, bool useParallelEP,
+            int maxHaloPoints);
   virtual ~GTCodeGen();
 
   virtual std::unique_ptr<TranslationUnit> generateCode() override;
@@ -64,12 +63,10 @@ public:
 private:
   std::string generateStencilInstantiation(
       const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation);
-  //  std::string generateGlobals(const std::shared_ptr<SIR>& Sir);
   std::string cacheWindowToString(const iir::Cache::window& cacheWindow);
 
-  void buildPlaceholderDefinitions(MemberFunction& function,
-      const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
-      const std::map<int, iir::Stencil::FieldInfo>& stencilFields,
+  void generatePlaceholderDefinitions(
+      Structure& function, const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
       const sir::GlobalVariableMap& globalsMap, const CodeGenProperties& codeGenProperties) const;
 
   std::string getFieldName(std::shared_ptr<sir::Field> const& f) const { return f->Name; }
@@ -107,10 +104,12 @@ private:
   generateStencilClasses(const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
                          Class& stencilWrapperClass, CodeGenProperties& codeGenProperties);
 
-  /// code generate sync methods statements for all the fields passed
-  void generateSyncStorages(
-      MemberFunction& method,
-      const IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& stencilFields) const;
+  void generateGridConstruction(MemberFunction& stencilConstructor, const iir::Stencil& stencil,
+                                IntervalDefinitions& intervalDefinitions,
+                                const CodeGenProperties& codeGenProperties) const;
+
+  static std::string getAxisName(const std::string& stencilName);
+  static std::string getGridName(const std::string& stencilName);
 
   /// construct a string of template parameters for storages
   std::vector<std::string> buildFieldTemplateNames(
@@ -118,6 +117,11 @@ private:
 
   /// Maximum needed vector size of boost::fusion containers
   std::size_t mplContainerMaxSize_;
+
+  /// Use the parallel keyword for mulistages
+  struct GTCodeGenOptions {
+    bool useParallelEP_;
+  } codeGenOptions_;
 };
 
 } // namespace gt

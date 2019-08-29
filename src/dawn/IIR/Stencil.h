@@ -19,6 +19,7 @@
 #include "dawn/IIR/MultiStage.h"
 #include "dawn/SIR/SIR.h"
 #include "dawn/SIR/Statement.h"
+#include "dawn/Support/ContainerUtils.h"
 #include <functional>
 #include <list>
 #include <memory>
@@ -49,8 +50,8 @@ public:
   // The dimensions is an array of numberes in x,y and z describing if the field is allowed to have
   // extens in this dimension: [1,0,0] is a storage_i and cannot be accessed with field[j+1]
   struct FieldInfo {
-    FieldInfo(bool t, std::string name, Array3i dim, const Field& f)
-        : Name(name), Dimensions(dim), field(f), IsTemporary(t) {}
+    FieldInfo(bool t, std::string fieldName, Array3i dim, const Field& f)
+        : Name(fieldName), Dimensions(dim), field(f), IsTemporary(t) {}
 
     std::string Name;
     Array3i Dimensions;
@@ -180,9 +181,6 @@ public:
   Stencil(const StencilMetaInformation& metadata, sir::Attr attributes, int StencilID);
 
   Stencil(Stencil&&) = default;
-
-  Stencil& operator=(const Stencil&) = default;
-  Stencil& operator=(Stencil&&) = default;
   /// @}
 
   /// @brief clone the stencil returning a smart ptr
@@ -287,10 +285,15 @@ public:
   const std::shared_ptr<sir::Stencil> getSIRStencil() const;
 
   /// @brief Apply the visitor to all statements in the stencil
-  void accept(ASTVisitor& visitor);
+  void accept(iir::ASTVisitor& visitor);
 
   /// @brief Get the pair <AccessID, field> for the fields used within the multi-stage
   const std::unordered_map<int, FieldInfo>& getFields() const { return derivedInfo_.fields_; }
+
+  /// @brief Get the pair <AccessID, field> for the fields used within the multi-stage
+  std::map<int, FieldInfo> getOrderedFields() const {
+    return support::orderMap(derivedInfo_.fields_);
+  }
 
   std::unordered_map<int, Field> computeFieldsOnTheFly() const;
 

@@ -15,7 +15,7 @@
 #ifndef DAWN_OPTIMIZER_REPLACING_H
 #define DAWN_OPTIMIZER_REPLACING_H
 
-#include "dawn/SIR/ASTVisitor.h"
+#include "dawn/IIR/ASTVisitor.h"
 #include "dawn/Support/ArrayRef.h"
 #include <memory>
 
@@ -28,7 +28,7 @@ class Stencil;
 class StatementAccessesPair;
 class StencilInstantiation;
 class StencilMetaInformation;
-}
+} // namespace iir
 
 /// @name Replacing routines
 /// @ingroup optimizer

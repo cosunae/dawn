@@ -14,24 +14,27 @@
 
 #include "dawn/CodeGen/CXXNaive/ASTStencilDesc.h"
 #include "dawn/CodeGen/CXXUtil.h"
-#include "dawn/SIR/AST.h"
+#include "dawn/IIR/AST.h"
+#include "dawn/Support/IndexRange.h"
 #include "dawn/Support/Unreachable.h"
 
 namespace dawn {
 namespace codegen {
 namespace cxxnaive {
 
-ASTStencilDesc::ASTStencilDesc(const iir::StencilMetaInformation& metadata,
-                               CodeGenProperties const& codeGenProperties)
-    : ASTCodeGenCXX(), metadata_(metadata), codeGenProperties_(codeGenProperties) {}
+ASTStencilDesc::ASTStencilDesc(
+    const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
+    CodeGenProperties const& codeGenProperties)
+    : ASTCodeGenCXX(), instantiation_(stencilInstantiation),
+      metadata_(instantiation_->getMetaData()), codeGenProperties_(codeGenProperties) {}
 
 ASTStencilDesc::~ASTStencilDesc() {}
 
-std::string ASTStencilDesc::getName(const std::shared_ptr<Stmt>& stmt) const {
+std::string ASTStencilDesc::getName(const std::shared_ptr<iir::Stmt>& stmt) const {
   return metadata_.getFieldNameFromAccessID(metadata_.getAccessIDFromStmt(stmt));
 }
 
-std::string ASTStencilDesc::getName(const std::shared_ptr<Expr>& expr) const {
+std::string ASTStencilDesc::getName(const std::shared_ptr<iir::Expr>& expr) const {
   return metadata_.getFieldNameFromAccessID(metadata_.getAccessIDFromExpr(expr));
 }
 
@@ -39,23 +42,45 @@ std::string ASTStencilDesc::getName(const std::shared_ptr<Expr>& expr) const {
 //     Stmt
 //===------------------------------------------------------------------------------------------===//
 
-void ASTStencilDesc::visit(const std::shared_ptr<ReturnStmt>& stmt) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::ReturnStmt>& stmt) {
   DAWN_ASSERT_MSG(0, "ReturnStmt not allowed in StencilDesc AST");
 }
 
-void ASTStencilDesc::visit(const std::shared_ptr<VerticalRegionDeclStmt>& stmt) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::VerticalRegionDeclStmt>& stmt) {
   DAWN_ASSERT_MSG(0, "VerticalRegionDeclStmt not allowed in StencilDesc AST");
 }
 
-void ASTStencilDesc::visit(const std::shared_ptr<StencilCallDeclStmt>& stmt) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::StencilCallDeclStmt>& stmt) {
   int stencilID = metadata_.getStencilIDFromStencilCallStmt(stmt);
+
+  const iir::Stencil& stencil = instantiation_->getIIR()->getStencil(stencilID);
+
+  // fields used in the stencil
+  const auto stencilFields = stencil.getOrderedFields();
+
+  auto nonTempFields = makeRange(
+      stencilFields,
+      std::function<bool(std::pair<int, iir::Stencil::FieldInfo> const&)>(
+          [](std::pair<int, iir::Stencil::FieldInfo> const& p) { return !p.second.IsTemporary; }));
 
   std::string stencilName =
       codeGenProperties_.getStencilName(StencilContext::SC_Stencil, stencilID);
-  ss_ << "m_" << stencilName + "->run();\n";
+  ss_ << "m_" << stencilName + ".run";
+
+  RangeToString fieldArgs(",", "(", ");");
+
+  ss_ << fieldArgs(nonTempFields, [&](const std::pair<const int, iir::Stencil::FieldInfo>& fieldp) {
+    if(metadata_.isAccessType(iir::FieldAccessType::FAT_InterStencilTemporary, fieldp.first)) {
+      return "m_" + fieldp.second.Name;
+    } else {
+      return fieldp.second.Name;
+    }
+  });
+
+  ss_ << std::endl;
 }
 
-void ASTStencilDesc::visit(const std::shared_ptr<BoundaryConditionDeclStmt>& stmt) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::BoundaryConditionDeclStmt>& stmt) {
   //  DAWN_ASSERT_MSG(0, "BoundaryConditionDeclStmt not yet implemented");
 }
 
@@ -63,15 +88,15 @@ void ASTStencilDesc::visit(const std::shared_ptr<BoundaryConditionDeclStmt>& stm
 //     Expr
 //===------------------------------------------------------------------------------------------===//
 
-void ASTStencilDesc::visit(const std::shared_ptr<StencilFunCallExpr>& expr) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::StencilFunCallExpr>& expr) {
   DAWN_ASSERT_MSG(0, "StencilFunCallExpr not allowed in StencilDesc AST");
 }
 
-void ASTStencilDesc::visit(const std::shared_ptr<StencilFunArgExpr>& expr) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::StencilFunArgExpr>& expr) {
   DAWN_ASSERT_MSG(0, "StencilFunArgExpr not allowed in StencilDesc AST");
 }
 
-void ASTStencilDesc::visit(const std::shared_ptr<VarAccessExpr>& expr) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::VarAccessExpr>& expr) {
   if(metadata_.isAccessType(iir::FieldAccessType::FAT_GlobalVariable,
                             metadata_.getAccessIDFromExpr(expr)))
     ss_ << "m_globals.";
@@ -85,7 +110,7 @@ void ASTStencilDesc::visit(const std::shared_ptr<VarAccessExpr>& expr) {
   }
 }
 
-void ASTStencilDesc::visit(const std::shared_ptr<FieldAccessExpr>& expr) {
+void ASTStencilDesc::visit(const std::shared_ptr<iir::FieldAccessExpr>& expr) {
   DAWN_ASSERT_MSG(0, "FieldAccessExpr not allowed in StencilDesc AST");
 }
 

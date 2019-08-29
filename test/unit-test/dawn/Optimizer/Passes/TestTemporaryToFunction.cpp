@@ -15,7 +15,7 @@
 #include "dawn/CodeGen/CXXNaive/CXXNaiveCodeGen.h"
 #include "dawn/CodeGen/GridTools/GTCodeGen.h"
 #include "dawn/Compiler/DawnCompiler.h"
-#include "dawn/SIR/SIRSerializer.h"
+#include "dawn/Serialization/SIRSerializer.h"
 #include "test/unit-test/dawn/Optimizer/TestEnvironment.h"
 #include <fstream>
 #include <gtest/gtest.h>
@@ -59,7 +59,9 @@ protected:
 
     // Generate code
     std::unique_ptr<codegen::CodeGen> CG;
-    CG = make_unique<codegen::gt::GTCodeGen>(optimizer.get());
+    CG = make_unique<codegen::gt::GTCodeGen>(
+        optimizer->getStencilInstantiationMap(), optimizer->getDiagnostics(),
+        optimizer->getOptions().UseParallelEP, optimizer->getOptions().MaxHaloPoints);
     auto translationUnit = CG->generateCode();
 
     if(optimizer->getDiagnostics().hasDiags()) {

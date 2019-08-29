@@ -27,7 +27,8 @@ sys_path.insert(1, __dawn_install_protobuf_module__)
 #
 # Export all SIR classes
 #
-from .SIR_pb2 import *
+from SIR.SIR_pb2 import *
+from SIR.statements_pb2 import *
 from google.protobuf import json_format
 
 ExprType = TypeVar('Expr',
@@ -82,7 +83,7 @@ def from_json(text: str, message_type):
     return msg
 
 
-def makeType(builtin_type_or_name, is_const: bool = False, is_volatile: bool = False):
+def make_type(builtin_type_or_name, is_const: bool = False, is_volatile: bool = False):
     """ Wrap a concrete expression (e.g VarAccessExpr) into an Expr object
 
     :param builtin_type_or_name: Either an Enum of BuiltinType or the name of the custom type in
@@ -107,34 +108,35 @@ def makeType(builtin_type_or_name, is_const: bool = False, is_volatile: bool = F
     return t
 
 
-def makeAST(root: StmtType) -> AST:
+def make_ast(root: List[StmtType]) -> AST:
     """ Create an AST
 
     :param root:    Root node of the AST (needs to be of type BlockStmt)
     """
     ast = AST()
-    if isinstance(root, BlockStmt) or (
-        isinstance(root, Stmt) and root.WhichOneof("stmt") == "block_stmt"):
-        ast.root.CopyFrom(makeStmt(root))
-    else:
-        raise SIRError("root statement of an AST needs to be a BlockStmt")
+
+    block_stmt = make_block_stmt(root)
+
+    ast.root.CopyFrom(make_stmt(block_stmt))
     return ast
 
 
-def makeField(name: str, is_temporary: bool = False) -> Field:
+def make_field(name: str, is_temporary: bool = False, dimensions: List[int] = [1, 1, 1]) -> Field:
     """ Create a Field
 
     :param name:         Name of the field
     :param is_temporary: Is it a temporary field?
+    :param dimensions:   mask list to identify dimensions contained by the field
     """
     field = Field()
     field.name = name
     field.is_temporary = is_temporary
+    field.field_dimensions.extend(dimensions)
     return field
 
 
-def makeInterval(lower_level, upper_level, lower_offset: int = 0,
-                 upper_offset: int = 0) -> Interval:
+def make_interval(lower_level, upper_level, lower_offset: int = 0,
+                  upper_offset: int = 0) -> Interval:
     """ Create an Interval
 
     Representation of a vertical interval, given by a lower and upper bound where a bound
@@ -167,7 +169,43 @@ def makeInterval(lower_level, upper_level, lower_offset: int = 0,
     return interval
 
 
-def makeStencilCall(callee: str, arguments: List[Field]) -> StencilCall:
+def make_stencil(name: str, ast: AST, fields: List[Field]) -> Stencil:
+    """ Create a Stencil
+
+    :param name:      Name of the stencil
+    :param ast:       AST with stmts of the stencil
+    :param fields:    list of input-output fields
+    """
+
+    stencil = Stencil()
+    stencil.name = name
+    stencil.ast.CopyFrom(ast)
+    stencil.fields.extend(fields)
+
+    return stencil
+
+
+def make_sir(filename: str, stencils: List[Stencil], functions: List[StencilFunction] = [],
+             global_variables: GlobalVariableMap = None) -> SIR:
+    """ Create a SIR
+
+    :param filename:          Source filename
+    :param stencils:          list of stencils that compose the SIR
+    :param functions:         list of functions used in the SIR
+    :param global_variables:  global variable map used in the SIR
+    """
+
+    sir = SIR()
+    sir.filename = filename
+    sir.stencils.extend(stencils)
+    sir.stencil_functions.extend(functions)
+    if global_variables:
+        sir.global_variables.CopyFrom(global_variables)
+
+    return sir
+
+
+def make_stencil_call(callee: str, arguments: List[Field]) -> StencilCall:
     """ Create a StencilCall
 
     :param callee:      Name of the called stencil (i.e callee)
@@ -177,14 +215,14 @@ def makeStencilCall(callee: str, arguments: List[Field]) -> StencilCall:
     call.callee = callee
     if isinstance(arguments, Iterable):
         call.arguments.extend(
-            [makeField(arg) if isinstance(arg, str) else arg for arg in arguments])
+            [make_field(arg) if isinstance(arg, str) else arg for arg in arguments])
     else:
-        call.arguments.extend([makeField(arguments) if isinstance(arguments, str) else arguments])
+        call.arguments.extend([make_field(arguments) if isinstance(arguments, str) else arguments])
     return call
 
 
-def makeVerticalRegion(ast: AST, interval: Interval,
-                       loop_order: VerticalRegion.LoopOrder) -> VerticalRegion:
+def make_vertical_region(ast: AST, interval: Interval,
+                         loop_order: VerticalRegion.LoopOrder) -> VerticalRegion:
     """ Create a VerticalRegion
 
     :param ast:         Syntax tree of the body of the vertical region
@@ -198,7 +236,7 @@ def makeVerticalRegion(ast: AST, interval: Interval,
     return vr
 
 
-def makeExpr(expr: ExprType):
+def make_expr(expr: ExprType):
     """ Wrap a concrete expression (e.g VarAccessExpr) into an Expr object
 
     :param expr: Expression to wrap
@@ -225,7 +263,7 @@ def makeExpr(expr: ExprType):
     elif isinstance(expr, VarAccessExpr):
         wrapped_expr.var_access_expr.CopyFrom(expr)
     elif isinstance(expr, FieldAccessExpr):
-        wrapped_expr.var_access_expr.CopyFrom(expr)
+        wrapped_expr.field_access_expr.CopyFrom(expr)
     elif isinstance(expr, LiteralAccessExpr):
         wrapped_expr.literal_access_expr.CopyFrom(expr)
     else:
@@ -233,7 +271,7 @@ def makeExpr(expr: ExprType):
     return wrapped_expr
 
 
-def makeStmt(stmt: StmtType):
+def make_stmt(stmt: StmtType):
     """ Wrap a concrete statement (e.g ExprStmt) into an Stmt object
 
     :param stmt: Statement to wrap
@@ -252,7 +290,7 @@ def makeStmt(stmt: StmtType):
     elif isinstance(stmt, VarDeclStmt):
         wrapped_stmt.var_decl_stmt.CopyFrom(stmt)
     elif isinstance(stmt, VerticalRegionDeclStmt):
-        wrapped_stmt.var_decl_stmt.CopyFrom(stmt)
+        wrapped_stmt.vertical_region_decl_stmt.CopyFrom(stmt)
     elif isinstance(stmt, StencilCallDeclStmt):
         wrapped_stmt.var_decl_stmt.CopyFrom(stmt)
     elif isinstance(stmt, BoundaryConditionDeclStmt):
@@ -264,42 +302,41 @@ def makeStmt(stmt: StmtType):
     return wrapped_stmt
 
 
-def makeBlockStmt(statements: List[StmtType]) -> BlockStmt:
+def make_block_stmt(statements: List[StmtType]) -> BlockStmt:
     """ Create an UnaryOperator
 
-    :param op:      Operation (e.g "+" or "-").
-    :param operand:  Expression to apply the operation.
+    :param statements: List of statements that compose the block
     """
     stmt = BlockStmt()
     if isinstance(statements, Iterable):
-        stmt.statements.extend([makeStmt(s) for s in statements])
+        stmt.statements.extend([make_stmt(s) for s in statements])
     else:
-        stmt.statements.extend([makeStmt(statements)])
+        stmt.statements.extend([make_stmt(statements)])
     return stmt
 
 
-def makeExprStmt(expr: ExprType) -> ExprStmt:
+def make_expr_stmt(expr: ExprType) -> ExprStmt:
     """ Create an ExprStmt
 
     :param expr:      Expression.
     """
     stmt = ExprStmt()
-    stmt.expr.CopyFrom(makeExpr(expr))
+    stmt.expr.CopyFrom(make_expr(expr))
     return stmt
 
 
-def makeReturnStmt(expr: ExprType) -> ReturnStmt:
+def make_return_stmt(expr: ExprType) -> ReturnStmt:
     """ Create an ReturnStmt
 
     :param expr:      Expression to return.
     """
     stmt = ReturnStmt()
-    stmt.expr.CopyFrom(makeExpr(expr))
+    stmt.expr.CopyFrom(make_expr(expr))
     return stmt
 
 
-def makeVarDeclStmt(type: Type, name: str, dimension: int = 0, op: str = "=",
-                    init_list=None) -> VarDeclStmt:
+def make_var_decl_stmt(type: Type, name: str, dimension: int = 0, op: str = "=",
+                       init_list=None) -> VarDeclStmt:
     """ Create an ReturnStmt
 
     :param type:        Type of the variable.
@@ -316,14 +353,14 @@ def makeVarDeclStmt(type: Type, name: str, dimension: int = 0, op: str = "=",
     stmt.op = op
     if init_list:
         if isinstance(init_list, Iterable):
-            stmt.init_list.extend([makeExpr(expr) for expr in init_list])
+            stmt.init_list.extend([make_expr(expr) for expr in init_list])
         else:
-            stmt.init_list.extend([makeExpr(init_list)])
+            stmt.init_list.extend([make_expr(init_list)])
 
     return stmt
 
 
-def makeStencilCallDeclStmt(stencil_call: StencilCall) -> StencilCallDeclStmt:
+def make_stencil_call_decl_stmt(stencil_call: StencilCall) -> StencilCallDeclStmt:
     """ Create a StencilCallDeclStmt
 
     :param stencil_call:   Stencil call.
@@ -333,7 +370,7 @@ def makeStencilCallDeclStmt(stencil_call: StencilCall) -> StencilCallDeclStmt:
     return stmt
 
 
-def makeVerticalRegionDeclStmt(vertical_region: VerticalRegion) -> VerticalRegionDeclStmt:
+def make_vertical_region_decl_stmt(vertical_region: VerticalRegion) -> VerticalRegionDeclStmt:
     """ Create a VerticalRegionDeclStmt
 
     :param vertical_region:   Vertical region.
@@ -343,8 +380,19 @@ def makeVerticalRegionDeclStmt(vertical_region: VerticalRegion) -> VerticalRegio
     return stmt
 
 
-def makeBoundaryConditionDeclStmt(functor: str,
-                                  fields: List[Field]) -> BoundaryConditionDeclStmt:
+def make_vertical_region_decl_stmt(ast: AST, interval: Interval,
+                                   loop_order: VerticalRegion.LoopOrder) -> VerticalRegionDeclStmt:
+    """ Create a VerticalRegionDeclStmt
+
+    :param vertical_region:   Vertical region.
+    """
+    stmt = VerticalRegionDeclStmt()
+    stmt.vertical_region.CopyFrom(make_vertical_region(ast, interval, loop_order))
+    return stmt
+
+ 
+def make_boundary_condition_decl_stmt(functor: str,
+                                      fields: List[Field]) -> BoundaryConditionDeclStmt:
     """ Create a BoundaryConditionDeclStmt
 
     :param functor:  Identifier of the boundary condition functor.
@@ -354,13 +402,13 @@ def makeBoundaryConditionDeclStmt(functor: str,
     stmt.functor = functor
     if isinstance(fields, Iterable):
         stmt.fields.extend(
-            [makeField(field) if isinstance(field, str) else field for field in fields])
+            [make_field(field) if isinstance(field, str) else field for field in fields])
     else:
-        stmt.fields.extend([makeField(fields) if isinstance(fields, str) else fields])
+        stmt.fields.extend([make_field(fields) if isinstance(fields, str) else fields])
     return stmt
 
 
-def makeIfStmt(cond_part: StmtType, then_part: StmtType, else_part: StmtType = None) -> IfStmt:
+def make_if_stmt(cond_part: StmtType, then_part: StmtType, else_part: StmtType = None) -> IfStmt:
     """ Create an ReturnStmt
 
     :param cond_part:   Condition part.
@@ -368,14 +416,14 @@ def makeIfStmt(cond_part: StmtType, then_part: StmtType, else_part: StmtType = N
     :param else_part:   Else part.
     """
     stmt = IfStmt()
-    stmt.expr.CopyFrom(makeStmt(cond_part))
-    stmt.expr.CopyFrom(makeStmt(then_part))
+    stmt.expr.CopyFrom(make_stmt(cond_part))
+    stmt.expr.CopyFrom(make_stmt(then_part))
     if else_part:
-        stmt.expr.CopyFrom(makeStmt(else_part))
+        stmt.expr.CopyFrom(make_stmt(else_part))
     return stmt
 
 
-def makeUnaryOperator(op: str, operand: ExprType) -> UnaryOperator:
+def make_unary_operator(op: str, operand: ExprType) -> UnaryOperator:
     """ Create an UnaryOperator
 
     :param op:      Operation (e.g "+" or "-").
@@ -383,11 +431,11 @@ def makeUnaryOperator(op: str, operand: ExprType) -> UnaryOperator:
     """
     expr = UnaryOperator()
     expr.op = op
-    expr.operand.CopyFrom(makeExpr(operand))
+    expr.operand.CopyFrom(make_expr(operand))
     return expr
 
 
-def makeBinaryOperator(left: ExprType, op: str, right: ExprType) -> BinaryOperator:
+def make_binary_operator(left: ExprType, op: str, right: ExprType) -> BinaryOperator:
     """ Create a BinaryOperator
 
     :param left:    Left-hand side.
@@ -396,12 +444,20 @@ def makeBinaryOperator(left: ExprType, op: str, right: ExprType) -> BinaryOperat
     """
     expr = BinaryOperator()
     expr.op = op
-    expr.left.CopyFrom(makeExpr(left))
-    expr.right.CopyFrom(makeExpr(right))
+    expr.left.CopyFrom(make_expr(left))
+    expr.right.CopyFrom(make_expr(right))
     return expr
 
+def make_assignment_stmt(left: ExprType, right: ExprType, op: str = "=") -> ExprStmt:
+    """ Create an AssignmentStmt
 
-def makeAssignmentExpr(left: ExprType, right: ExprType, op: str = "=") -> AssignmentExpr:
+    :param left:    Left-hand side.
+    :param right:   Right-hand side.
+    :param op:      Operation (e.g "=" or "+=").
+    """
+    return make_expr_stmt(make_assignment_expr(left, right, op))
+
+def make_assignment_expr(left: ExprType, right: ExprType, op: str = "=") -> AssignmentExpr:
     """ Create an AssignmentExpr
 
     :param left:    Left-hand side.
@@ -410,12 +466,12 @@ def makeAssignmentExpr(left: ExprType, right: ExprType, op: str = "=") -> Assign
     """
     expr = AssignmentExpr()
     expr.op = op
-    expr.left.CopyFrom(makeExpr(left))
-    expr.right.CopyFrom(makeExpr(right))
+    expr.left.CopyFrom(make_expr(left))
+    expr.right.CopyFrom(make_expr(right))
     return expr
 
 
-def makeTernaryOperator(cond: ExprType, left: ExprType, right: ExprType) -> TernaryOperator:
+def make_ternary_operator(cond: ExprType, left: ExprType, right: ExprType) -> TernaryOperator:
     """ Create a TernaryOperator
 
     :param cond:    Condition.
@@ -423,13 +479,13 @@ def makeTernaryOperator(cond: ExprType, left: ExprType, right: ExprType) -> Tern
     :param right:   Right-hand side.
     """
     expr = TernaryOperator()
-    expr.cond.CopyFrom(makeExpr(cond))
-    expr.left.CopyFrom(makeExpr(left))
-    expr.right.CopyFrom(makeExpr(right))
+    expr.cond.CopyFrom(make_expr(cond))
+    expr.left.CopyFrom(make_expr(left))
+    expr.right.CopyFrom(make_expr(right))
     return expr
 
 
-def makeFunCallExpr(callee: str, arguments: List[ExprType]) -> FunCallExpr:
+def make_fun_call_expr(callee: str, arguments: List[ExprType]) -> FunCallExpr:
     """ Create a FunCallExpr
 
     :param callee:        Identifier of the function (i.e callee).
@@ -437,11 +493,11 @@ def makeFunCallExpr(callee: str, arguments: List[ExprType]) -> FunCallExpr:
     """
     expr = FunCallExpr()
     expr.callee = callee
-    expr.arguments.extend([makeExpr(arg) for arg in arguments])
+    expr.arguments.extend([make_expr(arg) for arg in arguments])
     return expr
 
 
-def makeStencilFunCallExpr(callee: str, arguments: List[ExprType]) -> StencilFunCallExpr:
+def make_stencil_fun_call_expr(callee: str, arguments: List[ExprType]) -> StencilFunCallExpr:
     """ Create a StencilFunCallExpr
 
     :param callee:        Identifier of the function (i.e callee).
@@ -449,12 +505,12 @@ def makeStencilFunCallExpr(callee: str, arguments: List[ExprType]) -> StencilFun
     """
     expr = StencilFunCallExpr()
     expr.callee = callee
-    expr.arguments.extend([makeExpr(arg) for arg in arguments])
+    expr.arguments.extend([make_expr(arg) for arg in arguments])
     return expr
 
 
-def makeStencilFunArgExpr(direction: Dimension.Direction, offset: int = 0,
-                          argument_index: int = -1) -> StencilFunArgExpr:
+def make_stencil_fun_arg_expr(direction: Dimension.Direction, offset: int = 0,
+                              argument_index: int = -1) -> StencilFunArgExpr:
     """ Create a StencilFunArgExpr
 
     :param direction:       Direction of the argument.
@@ -472,10 +528,10 @@ def makeStencilFunArgExpr(direction: Dimension.Direction, offset: int = 0,
     return expr
 
 
-def makeFieldAccessExpr(name: str, offset: List[int] = [0, 0, 0],
-                        argument_map: List[int] = [-1, -1, -1],
-                        argument_offset: List[int] = [0, 0, 0],
-                        negate_offset: bool = False) -> FieldAccessExpr:
+def make_field_access_expr(name: str, offset: List[int] = [0, 0, 0],
+                           argument_map: List[int] = [-1, -1, -1],
+                           argument_offset: List[int] = [0, 0, 0],
+                           negate_offset: bool = False) -> FieldAccessExpr:
     """ Create a FieldAccessExpr.
 
     :param name:            Name of the field.
@@ -493,8 +549,8 @@ def makeFieldAccessExpr(name: str, offset: List[int] = [0, 0, 0],
     return expr
 
 
-def makeVarAccessExpr(name: str, index: ExprType = None,
-                      is_external: bool = False) -> VarAccessExpr:
+def make_var_access_expr(name: str, index: ExprType = None,
+                         is_external: bool = False) -> VarAccessExpr:
     """ Create a VarAccessExpr.
 
     :param name:        Name of the variable.
@@ -505,11 +561,11 @@ def makeVarAccessExpr(name: str, index: ExprType = None,
     expr.name = name
     expr.is_external = is_external
     if index:
-        expr.index.CopyFrom(makeExpr(index))
+        expr.index.CopyFrom(make_expr(index))
     return expr
 
 
-def makeLiteralAccessExpr(value: str, type: BuiltinType.TypeID) -> LiteralAccessExpr:
+def make_literal_access_expr(value: str, type: BuiltinType.TypeID) -> LiteralAccessExpr:
     """ Create a LiteralAccessExpr.
 
     :param value:   Value of the literal (e.g "1.123123").
@@ -532,64 +588,67 @@ __all__ = [
     'GlobalVariableMap',
     'SourceLocation',
     'AST',
-    'makeAST',
+    'make_ast',
     'Field',
-    'makeField',
+    'make_field',
     'Interval',
-    'makeInterval',
+    'make_interval',
     'BuiltinType',
     'SourceLocation',
     'Type',
-    'makeType',
+    'make_type',
     'Dimension',
     'VerticalRegion',
-    'makeVerticalRegion',
+    'make_vertical_region',
     'StencilCall',
-    'makeStencilCall',
+    'make_stencil_call',
+    'make_stencil',
+    'make_sir',
 
     # Stmt
     'Stmt',
-    'makeStmt',
+    'make_stmt',
     'BlockStmt',
-    'makeBlockStmt',
+    'make_block_stmt',
     'ExprStmt',
-    'makeExprStmt',
+    'make_expr_stmt',
     'ReturnStmt',
-    'makeReturnStmt',
+    'make_return_stmt',
     'VarDeclStmt',
-    'makeVarDeclStmt',
+    'make_var_decl_stmt',
     'VerticalRegionDeclStmt',
-    'makeVerticalRegionDeclStmt',
+    'make_vertical_region_decl_stmt',
     'StencilCallDeclStmt',
-    'makeStencilCallDeclStmt',
+    'make_stencil_call_decl_stmt',
     'BoundaryConditionDeclStmt',
-    'makeBoundaryConditionDeclStmt',
+    'make_boundary_condition_decl_stmt',
     'IfStmt',
-    'makeIfStmt',
+    'make_if_stmt',
 
     # Expr
     'Expr',
-    'makeExpr',
+    'make_expr',
     'UnaryOperator',
-    'makeUnaryOperator',
+    'make_unary_operator',
     'BinaryOperator',
-    'makeBinaryOperator',
+    'make_binary_operator',
     'AssignmentExpr',
-    'makeAssignmentExpr',
+    'make_assignment_expr',
+    'make_assignment_stmt',
     'TernaryOperator',
-    'makeTernaryOperator',
+    'make_ternary_operator',
     'FunCallExpr',
-    'makeFunCallExpr',
+    'make_fun_call_expr',
     'StencilFunCallExpr',
-    'makeStencilFunCallExpr',
+    'make_stencil_fun_call_expr',
     'StencilFunArgExpr',
-    'makeStencilFunArgExpr',
+    'make_stencil_fun_arg_expr',
     'VarAccessExpr',
-    'makeVarAccessExpr',
+    'make_var_access_expr',
     'FieldAccessExpr',
-    'makeFieldAccessExpr',
+    'make_field_access_expr',
     'LiteralAccessExpr',
-    'makeLiteralAccessExpr',
+    'make_literal_access_expr',
 
     # Convenience functions
     'to_json',

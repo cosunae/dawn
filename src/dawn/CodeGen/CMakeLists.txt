@@ -42,11 +42,13 @@ yoda_add_library(
           Cuda/ASTStencilFunctionParamVisitor.cpp
           Cuda/ASTStencilFunctionParamVisitor.h
           Cuda/MSCodeGen.cpp
-          Cuda/MSCodeGen.hpp
+          Cuda/MSCodeGen.h
           GridTools/ASTStencilBody.cpp
           GridTools/ASTStencilBody.h
           GridTools/ASTStencilDesc.cpp
           GridTools/ASTStencilDesc.h
+          GridTools/CodeGenUtils.cpp
+          GridTools/CodeGenUtils.h
           GridTools/GTCodeGen.cpp
           GridTools/GTCodeGen.h
           StencilFunctionAsBCGenerator.cpp

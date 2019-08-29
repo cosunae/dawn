@@ -34,7 +34,7 @@ class OptimizerContext;
 
 namespace iir {
 
-enum class TemporaryScope { TS_LocalVariable, TS_StencilTemporary, TS_Field };
+enum class TemporaryScope { TS_LocalVariable, TS_StencilTemporary };
 
 /// @brief Specific instantiation of a stencil
 /// @ingroup optimizer
@@ -61,13 +61,19 @@ public:
   /// @brief Get the orginal `name` and a list of source locations of the field (or variable)
   /// associated with the `AccessID` in the given statement.
   std::pair<std::string, std::vector<SourceLocation>>
-  getOriginalNameAndLocationsFromAccessID(int AccessID, const std::shared_ptr<Stmt>& stmt) const;
+  getOriginalNameAndLocationsFromAccessID(int AccessID, const std::shared_ptr<iir::Stmt>& stmt) const;
 
   /// @brief Get the original name of the field (as registered in the AST)
   std::string getOriginalNameFromAccessID(int AccessID) const;
 
   /// @brief check whether the `accessID` is accessed in more than one stencil
   bool isIDAccessedMultipleStencils(int accessID) const;
+
+  /// @brief check whether the `accessID` is accessed in more than one MS
+  bool isIDAccessedMultipleMSs(int accessID) const;
+
+  /// @brief check if there is any (iterative) solver type of accesses for the accessID
+  bool hasSolverAccess(int accessID) const;
 
   /// @brief Get the value of the global variable `name`
   const sir::Value& getGlobalVariableValue(const std::string& name) const;
@@ -110,7 +116,7 @@ public:
   ///                   assignment). Can be `NULL`.
   /// @returns AccessID of the new field
   int createVersionAndRename(int AccessID, Stencil* stencil, int stageIndex, int stmtIndex,
-                             std::shared_ptr<Expr>& expr, RenameDirection dir);
+                             std::shared_ptr<iir::Expr>& expr, RenameDirection dir);
 
   /// @brief Rename all occurences of field `oldAccessID` to `newAccessID`
   void renameAllOccurrences(Stencil* stencil, int oldAccessID, int newAccessID);
@@ -155,7 +161,7 @@ public:
   const ::dawn::OptimizerContext* getOptimizerContext() const { return context_; }
 
   bool insertBoundaryConditions(std::string originalFieldName,
-                                std::shared_ptr<BoundaryConditionDeclStmt> bc);
+                                std::shared_ptr<iir::BoundaryConditionDeclStmt> bc);
 
   /// @brief Get a unique (positive) identifier
   inline int nextUID() { return UIDGenerator::getInstance()->get(); }
@@ -168,8 +174,8 @@ public:
   /// If `curStencilFunctionInstantiation` is not NULL, the stencil function is treated as a nested
   /// stencil function.
   std::shared_ptr<StencilFunctionInstantiation> makeStencilFunctionInstantiation(
-      const std::shared_ptr<StencilFunCallExpr>& expr,
-      const std::shared_ptr<sir::StencilFunction>& SIRStencilFun, const std::shared_ptr<AST>& ast,
+      const std::shared_ptr<iir::StencilFunCallExpr>& expr,
+      const std::shared_ptr<sir::StencilFunction>& SIRStencilFun, const std::shared_ptr<iir::AST>& ast,
       const Interval& interval,
       const std::shared_ptr<StencilFunctionInstantiation>& curStencilFunctionInstantiation);
 

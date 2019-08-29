@@ -115,6 +115,16 @@ static std::string remove_fileextension(std::string fullName, std::string extens
   return truncation;
 }
 
+static OptimizerContext::OptimizerContextOptions
+createOptimizerOptionsFromAllOptions(const Options& options) {
+  OptimizerContext::OptimizerContextOptions retval;
+#define OPT(TYPE, NAME, DEFAULT_VALUE, OPTION, OPTION_SHORT, HELP, VALUE_NAME, HAS_VALUE, F_GROUP) \
+  retval.NAME = options.NAME;
+#include "dawn/Optimizer/OptimizerOptions.inc"
+#undef OPT
+  return retval;
+}
+
 DawnCompiler::DawnCompiler(Options* options) : diagnostics_(make_unique<DiagnosticsEngine>()) {
   options_ = options ? make_unique<Options>(*options) : make_unique<Options>();
 }
@@ -158,12 +168,16 @@ std::unique_ptr<OptimizerContext> DawnCompiler::runOptimizer(std::shared_ptr<SIR
   }
 
   // Initialize optimizer
+  OptimizerContext::OptimizerContextOptions optimizerOptions;
+  if(options_) {
+    optimizerOptions = createOptimizerOptionsFromAllOptions(*options_);
+  }
   std::unique_ptr<OptimizerContext> optimizer =
-      make_unique<OptimizerContext>(getDiagnostics(), getOptions(), SIR);
+      make_unique<OptimizerContext>(getDiagnostics(), optimizerOptions, SIR);
   PassManager& passManager = optimizer->getPassManager();
 
   // Setup pass interface
-  optimizer->checkAndPushBack<PassInlining>(true, PassInlining::IK_InlineProcedures);
+  optimizer->checkAndPushBack<PassInlining>(true, PassInlining::InlineStrategy::InlineProcedures);
   // This pass is currently broken and needs to be redesigned before it can be enabled
   //  optimizer->checkAndPushBack<PassTemporaryFirstAccss>();
   optimizer->checkAndPushBack<PassFieldVersioning>();
@@ -181,7 +195,7 @@ std::unique_ptr<OptimizerContext> DawnCompiler::runOptimizer(std::shared_ptr<SIR
   optimizer->checkAndPushBack<PassTemporaryMerger>();
   optimizer->checkAndPushBack<PassInlining>(
       (getOptions().InlineSF || getOptions().PassTmpToFunction),
-      PassInlining::IK_ComputationsOnTheFly);
+      PassInlining::InlineStrategy::ComputationsOnTheFly);
   optimizer->checkAndPushBack<PassTemporaryToStencilFunction>();
   optimizer->checkAndPushBack<PassSetNonTempCaches>();
   optimizer->checkAndPushBack<PassSetCaches>();
@@ -190,6 +204,11 @@ std::unique_ptr<OptimizerContext> DawnCompiler::runOptimizer(std::shared_ptr<SIR
   optimizer->checkAndPushBack<PassSetBlockSize>();
   optimizer->checkAndPushBack<PassDataLocalityMetric>();
   optimizer->checkAndPushBack<PassSetSyncStage>();
+  // Since both cuda code generation as well as serialization do not support stencil-functions, we
+  // need to inline here as the last step
+  optimizer->checkAndPushBack<PassInlining>(getOptions().Backend == "cuda" ||
+                                                getOptions().SerializeIIR,
+                                            PassInlining::InlineStrategy::ComputationsOnTheFly);
 
   DAWN_LOG(INFO) << "All the passes ran with the current command line arugments:";
   for(const auto& a : passManager.getPasses()) {
@@ -241,12 +260,16 @@ std::unique_ptr<codegen::TranslationUnit> DawnCompiler::compile(const std::share
   // Generate code
   std::unique_ptr<codegen::CodeGen> CG;
 
-  if(options_->Backend == "gridtools") {
-    CG = make_unique<codegen::gt::GTCodeGen>(optimizer.get());
+  if(options_->Backend == "gt" || options_->Backend == "gridtools") {
+    CG = make_unique<codegen::gt::GTCodeGen>(optimizer->getStencilInstantiationMap(), *diagnostics_,
+                                             options_->UseParallelEP, options_->MaxHaloPoints);
   } else if(options_->Backend == "c++-naive") {
-    CG = make_unique<codegen::cxxnaive::CXXNaiveCodeGen>(optimizer.get());
+    CG = make_unique<codegen::cxxnaive::CXXNaiveCodeGen>(optimizer->getStencilInstantiationMap(),
+                                                         *diagnostics_, options_->MaxHaloPoints);
   } else if(options_->Backend == "cuda") {
-    CG = make_unique<codegen::cuda::CudaCodeGen>(optimizer.get());
+    CG = make_unique<codegen::cuda::CudaCodeGen>(
+        optimizer->getStencilInstantiationMap(), *diagnostics_, options_->MaxHaloPoints,
+        options_->nsms, options_->maxBlocksPerSM, options_->domain_size);
   } else if(options_->Backend == "c++-opt") {
     dawn_unreachable("GTClangOptCXX not supported yet");
   } else {

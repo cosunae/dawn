@@ -30,8 +30,6 @@ namespace iir {
 class StencilInstantiation;
 }
 
-class OptimizerContext;
-
 namespace codegen {
 namespace cuda {
 
@@ -43,9 +41,16 @@ class CudaCodeGen : public CodeGen {
 
 public:
   ///@brief constructor
-  CudaCodeGen(OptimizerContext* context);
+  CudaCodeGen(stencilInstantiationContext& ctx, DiagnosticsEngine& engine, int maxHaloPoints,
+              int nsms, int maxBlocksPerSM, std::string domainSize);
   virtual ~CudaCodeGen();
   virtual std::unique_ptr<TranslationUnit> generateCode() override;
+
+  struct CudaCodeGenOptions {
+    int nsms;
+    int maxBlocksPerSM;
+    std::string domainSize;
+  };
 
 private:
   static std::string
@@ -54,9 +59,9 @@ private:
 
   void addTempStorageTypedef(Structure& stencilClass, iir::Stencil const& stencil) const override;
 
-  void addTmpStorageInit(MemberFunction& ctr, iir::Stencil const& stencil,
-                         IndexRange<const std::map<int, iir::Stencil::FieldInfo>>&
-                             tempFields) const override;
+  void addTmpStorageInit(
+      MemberFunction& ctr, iir::Stencil const& stencil,
+      IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& tempFields) const override;
 
   void
   generateCudaKernelCode(std::stringstream& ssSW,
@@ -69,6 +74,7 @@ private:
 
   void
   generateStencilRunMethod(Structure& stencilClass, const iir::Stencil& stencil,
+                           const std::shared_ptr<StencilProperties>& stencilProperties,
                            const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
                            const std::unordered_map<std::string, std::string>& paramNameToType,
                            const sir::GlobalVariableMap& globalsMap) const;
@@ -90,21 +96,16 @@ private:
                             const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
                             const CodeGenProperties& codeGenProperties) const;
 
-  void generateStencilWrapperSyncMethod(
-      Class& stencilWrapperClass,
-      const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
-      const CodeGenProperties& codeGenProperties) const;
-
   void
   generateStencilWrapperPublicMemberFunctions(Class& stencilWrapperClass,
                                               const CodeGenProperties& codeGenProperties) const;
 
-  void generateStencilClassCtr(
-      Structure& stencilClass, const iir::Stencil& stencil,
-      const sir::GlobalVariableMap& globalsMap,
-      IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& nonTempFields,
-      IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& tempFields,
-      std::shared_ptr<StencilProperties> stencilProperties) const;
+  void
+  generateStencilClassCtr(Structure& stencilClass, const iir::Stencil& stencil,
+                          const sir::GlobalVariableMap& globalsMap,
+                          IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& nonTempFields,
+                          IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& tempFields,
+                          std::shared_ptr<StencilProperties> stencilProperties) const;
 
   void generateStencilClassMembers(
       Structure& stencilClass, const iir::Stencil& stencil,
@@ -115,6 +116,8 @@ private:
 
   std::string generateStencilInstantiation(
       const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation);
+
+  CudaCodeGenOptions codeGenOptions;
 };
 } // namespace cuda
 } // namespace codegen

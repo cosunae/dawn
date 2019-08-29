@@ -30,6 +30,7 @@ namespace cuda {
 /// @ingroup cuda
 class ASTStencilDesc : public ASTCodeGenCXX {
 protected:
+  const std::shared_ptr<iir::StencilInstantiation>& instantiation_;
   const iir::StencilMetaInformation& metadata_;
 
   const CodeGenProperties& codeGenProperties_;
@@ -37,29 +38,29 @@ protected:
 public:
   using Base = ASTCodeGenCXX;
 
-  ASTStencilDesc(const iir::StencilMetaInformation& metadata,
+  ASTStencilDesc(const std::shared_ptr<iir::StencilInstantiation>& instantiation,
                  const CodeGenProperties& CodeGenProperties);
 
   virtual ~ASTStencilDesc();
 
   /// @name Statement implementation
   /// @{
-  virtual void visit(const std::shared_ptr<ReturnStmt>& stmt) override;
-  virtual void visit(const std::shared_ptr<VerticalRegionDeclStmt>& stmt) override;
-  virtual void visit(const std::shared_ptr<StencilCallDeclStmt>& stmt) override;
-  virtual void visit(const std::shared_ptr<BoundaryConditionDeclStmt>& stmt) override;
+  virtual void visit(const std::shared_ptr<iir::ReturnStmt>& stmt) override;
+  virtual void visit(const std::shared_ptr<iir::VerticalRegionDeclStmt>& stmt) override;
+  virtual void visit(const std::shared_ptr<iir::StencilCallDeclStmt>& stmt) override;
+  virtual void visit(const std::shared_ptr<iir::BoundaryConditionDeclStmt>& stmt) override;
   /// @}
 
   /// @name Expression implementation
   /// @{
-  virtual void visit(const std::shared_ptr<StencilFunCallExpr>& expr) override;
-  virtual void visit(const std::shared_ptr<StencilFunArgExpr>& expr) override;
-  virtual void visit(const std::shared_ptr<VarAccessExpr>& expr) override;
-  virtual void visit(const std::shared_ptr<FieldAccessExpr>& expr) override;
+  virtual void visit(const std::shared_ptr<iir::StencilFunCallExpr>& expr) override;
+  virtual void visit(const std::shared_ptr<iir::StencilFunArgExpr>& expr) override;
+  virtual void visit(const std::shared_ptr<iir::VarAccessExpr>& expr) override;
+  virtual void visit(const std::shared_ptr<iir::FieldAccessExpr>& expr) override;
   /// @}
 
-  std::string getName(const std::shared_ptr<Stmt>& stmt) const override;
-  std::string getName(const std::shared_ptr<Expr>& expr) const override;
+  std::string getName(const std::shared_ptr<iir::Stmt>& stmt) const override;
+  std::string getName(const std::shared_ptr<iir::Expr>& expr) const override;
 };
 
 } // namespace cuda

@@ -19,11 +19,9 @@
 #include "dawn/CodeGen/Cuda/ASTStencilDesc.h"
 #include "dawn/CodeGen/Cuda/CacheProperties.h"
 #include "dawn/CodeGen/Cuda/CodeGeneratorHelper.h"
-#include "dawn/CodeGen/Cuda/MSCodeGen.hpp"
+#include "dawn/CodeGen/Cuda/MSCodeGen.h"
 #include "dawn/IIR/IIRNodeIterator.h"
 #include "dawn/IIR/StencilInstantiation.h"
-#include "dawn/Optimizer/OptimizerContext.h"
-#include "dawn/Optimizer/PassInlining.h"
 #include "dawn/SIR/SIR.h"
 #include "dawn/Support/Assert.h"
 #include "dawn/Support/Logging.h"
@@ -37,7 +35,9 @@ namespace dawn {
 namespace codegen {
 namespace cuda {
 
-CudaCodeGen::CudaCodeGen(OptimizerContext* context) : CodeGen(context) {}
+CudaCodeGen::CudaCodeGen(stencilInstantiationContext& ctx, DiagnosticsEngine& engine,
+                         int maxHaloPoints, int nsms, int maxBlocksPerSM, std::string domainSize)
+    : CodeGen(ctx, engine, maxHaloPoints), codeGenOptions{nsms, maxBlocksPerSM, domainSize} {}
 
 CudaCodeGen::~CudaCodeGen() {}
 
@@ -48,7 +48,8 @@ void CudaCodeGen::generateAllCudaKernels(
   for(const auto& ms : iterateIIROver<iir::MultiStage>(*(stencilInstantiation->getIIR()))) {
     DAWN_ASSERT(cachePropertyMap_.count(ms->getID()));
 
-    MSCodeGen msCodeGen(ssSW, ms, stencilInstantiation, cachePropertyMap_.at(ms->getID()));
+    MSCodeGen msCodeGen(ssSW, ms, stencilInstantiation, cachePropertyMap_.at(ms->getID()),
+                        codeGenOptions);
     msCodeGen.generateCudaKernelCode();
   }
 }
@@ -59,22 +60,23 @@ std::string CudaCodeGen::generateStencilInstantiation(
 
   std::stringstream ssSW;
 
-  Namespace cudaNamespace("cuda", ssSW);
+  Namespace dawnNamespace("dawn_generated", ssSW);	
+  Namespace cudaNamespace("cuda", ssSW);	
 
   // map from MS ID to cacheProperty
   for(const auto& ms : iterateIIROver<iir::MultiStage>(*(stencilInstantiation->getIIR()))) {
-    cachePropertyMap_.emplace(ms->getID(), makeCacheProperties(ms, stencilInstantiation, 2));
+    cachePropertyMap_.emplace(ms->getID(), makeCacheProperties(ms, stencilInstantiation, 2));    
   }
 
   generateAllCudaKernels(ssSW, stencilInstantiation);
 
-  Class StencilWrapperClass(stencilInstantiation->getName(), ssSW);
-  StencilWrapperClass.changeAccessibility("public");
+  Class stencilWrapperClass(stencilInstantiation->getName(), ssSW);
+  stencilWrapperClass.changeAccessibility("public");
 
   CodeGenProperties codeGenProperties = computeCodeGenProperties(stencilInstantiation.get());
 
   // generate code for base class of all the inner stencils
-  Structure sbase = StencilWrapperClass.addStruct("sbase", "", "timer_cuda");
+  Structure sbase = stencilWrapperClass.addStruct("sbase", "", "timer_cuda");
   auto baseCtr = sbase.addConstructor();
   baseCtr.addArg("std::string name");
   baseCtr.addInit("timer_cuda(name)");
@@ -82,12 +84,6 @@ std::string CudaCodeGen::generateStencilInstantiation(
   MemberFunction gettime = sbase.addMemberFunction("double", "get_time");
   gettime.addStatement("return total_time()");
   gettime.commit();
-  MemberFunction sbase_run = sbase.addMemberFunction("virtual void", "run");
-  sbase_run.startBody();
-  sbase_run.commit();
-  MemberFunction sbase_sync = sbase.addMemberFunction("virtual void", "sync_storages");
-  sbase_sync.startBody();
-  sbase_sync.commit();
 
   MemberFunction sbaseVdtor = sbase.addMemberFunction("virtual", "~sbase");
   sbaseVdtor.startBody();
@@ -96,27 +92,28 @@ std::string CudaCodeGen::generateStencilInstantiation(
 
   const auto& globalsMap = stencilInstantiation->getIIR()->getGlobalVariableMap();
 
-  generateBoundaryConditionFunctions(StencilWrapperClass, stencilInstantiation);
+  generateBoundaryConditionFunctions(stencilWrapperClass, stencilInstantiation);
 
-  generateStencilClasses(stencilInstantiation, StencilWrapperClass, codeGenProperties);
+  generateStencilClasses(stencilInstantiation, stencilWrapperClass, codeGenProperties);
 
-  generateStencilWrapperMembers(StencilWrapperClass, stencilInstantiation, codeGenProperties);
+  generateStencilWrapperMembers(stencilWrapperClass, stencilInstantiation, codeGenProperties);
 
-  generateStencilWrapperCtr(StencilWrapperClass, stencilInstantiation, codeGenProperties);
+  generateStencilWrapperCtr(stencilWrapperClass, stencilInstantiation, codeGenProperties);
 
   if(!globalsMap.empty()) {
-    generateGlobalsAPI(*stencilInstantiation, StencilWrapperClass, globalsMap, codeGenProperties);
+    generateGlobalsAPI(*stencilInstantiation, stencilWrapperClass, globalsMap, codeGenProperties);
   }
 
-  generateStencilWrapperRun(StencilWrapperClass, stencilInstantiation, codeGenProperties);
+  generateStencilWrapperSyncMethod(stencilWrapperClass);
 
-  generateStencilWrapperSyncMethod(StencilWrapperClass, stencilInstantiation, codeGenProperties);
+  generateStencilWrapperRun(stencilWrapperClass, stencilInstantiation, codeGenProperties);
 
-  generateStencilWrapperPublicMemberFunctions(StencilWrapperClass, codeGenProperties);
+  generateStencilWrapperPublicMemberFunctions(stencilWrapperClass, codeGenProperties);
 
-  StencilWrapperClass.commit();
+  stencilWrapperClass.commit();
 
   cudaNamespace.commit();
+  dawnNamespace.commit();
 
   return ssSW.str();
 }
@@ -136,20 +133,21 @@ void CudaCodeGen::generateStencilWrapperPublicMemberFunctions(
     stencilMembers.push_back("m_" + stencilProp.first);
   }
 
-  // Generate stencil getter
-  MemberFunction stencilGetter =
-      stencilWrapperClass.addMemberFunction("std::vector<sbase*>", "getStencils");
-  stencilGetter.addStatement("return " +
-                             RangeToString(", ", "std::vector<sbase*>({", "})")(
-                                 stencilMembers, [](const std::string& member) { return member; }));
-  stencilGetter.commit();
-
   MemberFunction clearMeters = stencilWrapperClass.addMemberFunction("void", "reset_meters");
   clearMeters.startBody();
   std::string s = RangeToString("\n", "", "")(
       stencilMembers, [](const std::string& member) { return member + "->reset();"; });
   clearMeters << s;
   clearMeters.commit();
+
+  MemberFunction totalTime = stencilWrapperClass.addMemberFunction("double", "get_total_time");
+  totalTime.startBody();
+  totalTime.addStatement("double res = 0");
+  std::string s1 = RangeToString("\n", "", "")(
+      stencilMembers, [](const std::string& member) { return "res +=" + member + "->get_time()"; });
+  totalTime.addStatement(s1);
+  totalTime.addStatement("return res");
+  totalTime.commit();
 }
 
 void CudaCodeGen::generateStencilClasses(
@@ -173,12 +171,13 @@ void CudaCodeGen::generateStencilClasses(
       continue;
 
     // fields used in the stencil
-    const auto stencilFields = orderMap(stencil.getFields());
+    const auto stencilFields = stencil.getOrderedFields();
 
     auto nonTempFields = makeRange(
-        stencilFields,
-        std::function<bool(std::pair<int, iir::Stencil::FieldInfo> const&)>([](
-            std::pair<int, iir::Stencil::FieldInfo> const& p) { return !p.second.IsTemporary; }));
+        stencilFields, std::function<bool(std::pair<int, iir::Stencil::FieldInfo> const&)>(
+                           [](std::pair<int, iir::Stencil::FieldInfo> const& p) {
+                             return !p.second.IsTemporary;
+                           }));
     auto tempFields = makeRange(
         stencilFields,
         std::function<bool(std::pair<int, iir::Stencil::FieldInfo> const&)>(
@@ -187,13 +186,13 @@ void CudaCodeGen::generateStencilClasses(
     Structure stencilClass = stencilWrapperClass.addStruct(stencilName, "", "sbase");
     auto& paramNameToType = stencilProperties->paramNameToType_;
 
-    for(auto fieldIt : nonTempFields) {
-      paramNameToType.emplace((*fieldIt).second.Name,
-                              getStorageType(metadata.getFieldDimensionsMask((*fieldIt).first)));
+    for(const auto& fieldPair : nonTempFields) {
+      paramNameToType.emplace(fieldPair.second.Name,
+                              getStorageType(metadata.getFieldDimensionsMask(fieldPair.first)));
     }
 
-    for(auto fieldIt : tempFields) {
-      paramNameToType.emplace((*fieldIt).second.Name, c_gtc().str() + "storage_t");
+    for(const auto& fieldPair : tempFields) {
+      paramNameToType.emplace(fieldPair.second.Name, c_gtc().str() + "storage_t");
     }
 
     generateStencilClassMembers(stencilClass, stencil, globalsMap, nonTempFields, tempFields,
@@ -205,28 +204,15 @@ void CudaCodeGen::generateStencilClasses(
                             stencilProperties);
 
     // virtual dtor
-    MemberFunction stencilClassDtr = stencilClass.addDestructor();
+    MemberFunction stencilClassDtr = stencilClass.addDestructor(true);
     stencilClassDtr.startBody();
     stencilClassDtr.commit();
-
-    // synchronize storages method
-    MemberFunction syncStoragesMethod = stencilClass.addMemberFunction("void", "sync_storages", "");
-    syncStoragesMethod.startBody();
-
-    for(auto fieldIt : nonTempFields) {
-      syncStoragesMethod.addStatement("m_" + (*fieldIt).second.Name + ".sync()");
-    }
-
-    syncStoragesMethod.commit();
 
     //
     // Run-Method
     //
-    generateStencilRunMethod(stencilClass, stencil, stencilInstantiation, paramNameToType,
-                             globalsMap);
-
-    // Generate stencil getter
-    stencilClass.addMemberFunction("sbase*", "get_stencil").addStatement("return this");
+    generateStencilRunMethod(stencilClass, stencil, stencilProperties, stencilInstantiation,
+                             paramNameToType, globalsMap);
   }
 }
 
@@ -235,8 +221,6 @@ void CudaCodeGen::generateStencilClassMembers(
     IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& nonTempFields,
     IndexRange<const std::map<int, iir::Stencil::FieldInfo>>& tempFields,
     std::shared_ptr<StencilProperties> stencilProperties) const {
-
-  auto& paramNameToType = stencilProperties->paramNameToType_;
 
   stencilClass.addComment("Members");
   stencilClass.addComment("Temporary storage typedefs");
@@ -249,14 +233,10 @@ void CudaCodeGen::generateStencilClassMembers(
   stencilClass.addMember("const " + c_gtc() + "domain&", "m_dom");
   stencilClass.addMember("const atlas::mesh::BlockConnectivity&", "m_table");
 
-  stencilClass.addComment("storage declarations");
-  for(auto fieldIt : nonTempFields) {
-    stencilClass.addMember(paramNameToType.at((*fieldIt).second.Name) + "&",
-                           "m_" + (*fieldIt).second.Name);
+  if(!tempFields.empty()) {
+    stencilClass.addComment("temporary storage declarations");
+    addTmpStorageDeclaration(stencilClass, tempFields);
   }
-
-  stencilClass.addComment("temporary storage declarations");
-  addTmpStorageDeclaration(stencilClass, tempFields);
 }
 void CudaCodeGen::generateStencilClassCtr(
     Structure& stencilClass, const iir::Stencil& stencil, const sir::GlobalVariableMap& globalsMap,
@@ -274,8 +254,8 @@ void CudaCodeGen::generateStencilClassCtr(
     stencilClassCtr.addArg("globals& globals_");
   }
 
-  for(auto fieldIt : nonTempFields) {
-    std::string fieldName = (*fieldIt).second.Name;
+  for(const auto& fieldPair : nonTempFields) {
+    std::string fieldName = fieldPair.second.Name;
     stencilClassCtr.addArg(paramNameToType.at(fieldName) + "& " + fieldName + "_");
   }
 
@@ -285,10 +265,6 @@ void CudaCodeGen::generateStencilClassCtr(
 
   if(!globalsMap.empty()) {
     stencilClassCtr.addInit("m_globals(globals_)");
-  }
-
-  for(auto fieldIt : nonTempFields) {
-    stencilClassCtr.addInit("m_" + (*fieldIt).second.Name + "(" + (*fieldIt).second.Name + "_)");
   }
 
   addTmpStorageInit(stencilClassCtr, stencil, tempFields);
@@ -321,7 +297,7 @@ void CudaCodeGen::generateStencilWrapperCtr(
     if(stencil.isEmpty())
       continue;
 
-    const auto stencilFields = orderMap(stencil.getFields());
+    const auto stencilFields = stencil.getOrderedFields();
 
     const std::string stencilName =
         codeGenProperties.getStencilName(StencilContext::SC_Stencil, stencil.getStencilID());
@@ -355,8 +331,6 @@ void CudaCodeGen::generateStencilWrapperCtr(
     addTmpStorageInitStencilWrapperCtr(StencilWrapperConstructor, stencils, tempFields);
   }
 
-  addBCFieldInitStencilWrapperCtr(StencilWrapperConstructor, codeGenProperties);
-
   StencilWrapperConstructor.commit();
 }
 
@@ -373,7 +347,8 @@ void CudaCodeGen::generateStencilWrapperMembers(
 
   for(auto stencilPropertiesPair :
       codeGenProperties.stencilProperties(StencilContext::SC_Stencil)) {
-    stencilWrapperClass.addMember("sbase*", "m_" + stencilPropertiesPair.second->name_);
+    stencilWrapperClass.addMember(stencilPropertiesPair.second->name_ + "*",
+                                  "m_" + stencilPropertiesPair.second->name_);
   }
 
   stencilWrapperClass.changeAccessibility("public");
@@ -384,8 +359,6 @@ void CudaCodeGen::generateStencilWrapperMembers(
   //
   // Members
   //
-  generateBCFieldMembers(stencilWrapperClass, stencilInstantiation, codeGenProperties);
-
   stencilWrapperClass.addComment("Stencil-Data");
 
   // Define allocated memebers if necessary
@@ -408,14 +381,28 @@ void CudaCodeGen::generateStencilWrapperRun(
     Class& stencilWrapperClass,
     const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
     const CodeGenProperties& codeGenProperties) const {
+  const auto& metadata = stencilInstantiation->getMetaData();
   // Generate the run method by generate code for the stencil description AST
   MemberFunction RunMethod = stencilWrapperClass.addMemberFunction("void", "run", "");
+  std::vector<std::string> apiFieldNames;
+
+  for(const auto& fieldID : metadata.getAccessesOfType<iir::FieldAccessType::FAT_APIField>()) {
+    std::string name = metadata.getFieldNameFromAccessID(fieldID);
+    apiFieldNames.push_back(name);
+  }
+
+  for(const auto& fieldName : apiFieldNames) {
+    RunMethod.addArg(codeGenProperties.getParamType(stencilInstantiation, fieldName) + " " +
+                     fieldName);
+  }
 
   RunMethod.finishArgs();
 
-  RunMethod.addStatement("sync_storages()");
+  RangeToString apiFieldArgs(",", "", "");
+
+  RunMethod.addStatement("sync_storages(" + apiFieldArgs(apiFieldNames) + ")");
   // generate the control flow code executing each inner stencil
-  ASTStencilDesc stencilDescCGVisitor(stencilInstantiation->getMetaData(), codeGenProperties);
+  ASTStencilDesc stencilDescCGVisitor(stencilInstantiation, codeGenProperties);
   stencilDescCGVisitor.setIndent(RunMethod.getIndent());
   for(const auto& statement :
       stencilInstantiation->getIIR()->getControlFlowDescriptor().getStatements()) {
@@ -423,110 +410,101 @@ void CudaCodeGen::generateStencilWrapperRun(
     RunMethod.addStatement(stencilDescCGVisitor.getCodeAndResetStream());
   }
 
-  RunMethod.addStatement("sync_storages()");
+  RunMethod.addStatement("sync_storages(" + apiFieldArgs(apiFieldNames) + ")");
   RunMethod.commit();
-}
-
-void CudaCodeGen::generateStencilWrapperSyncMethod(
-    Class& stencilWrapperClass,
-    const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
-    const CodeGenProperties& codeGenProperties) const {
-  // Generate the run method by generate code for the stencil description AST
-  MemberFunction syncMethod = stencilWrapperClass.addMemberFunction("void", "sync_storages");
-
-  syncMethod.finishArgs();
-
-  const auto& stencils = stencilInstantiation->getStencils();
-
-  // add the ctr initialization of each stencil
-  for(const auto& stencilPtr : stencils) {
-    iir::Stencil& stencil = *stencilPtr;
-    if(stencil.isEmpty())
-      continue;
-
-    const std::string stencilName =
-        codeGenProperties.getStencilName(StencilContext::SC_Stencil, stencil.getStencilID());
-
-    syncMethod.addStatement("m_" + stencilName + "->sync_storages()");
-  }
-
-  syncMethod.commit();
 }
 
 void CudaCodeGen::generateStencilRunMethod(
     Structure& stencilClass, const iir::Stencil& stencil,
+    const std::shared_ptr<StencilProperties>& stencilProperties,
     const std::shared_ptr<iir::StencilInstantiation>& stencilInstantiation,
     const std::unordered_map<std::string, std::string>& paramNameToType,
     const sir::GlobalVariableMap& globalsMap) const {
-  MemberFunction StencilRunMethod = stencilClass.addMemberFunction("virtual void", "run", "");
+  MemberFunction stencilRunMethod = stencilClass.addMemberFunction("virtual void", "run", "");
   const auto& metadata = stencilInstantiation->getMetaData();
 
-  StencilRunMethod.startBody();
+  // fields used in the stencil
+  const auto stencilFields = stencil.getOrderedFields();
 
-  StencilRunMethod.addComment("starting timers");
-  StencilRunMethod.addStatement("start()");
+  auto nonTempFields = makeRange(
+      stencilFields, std::function<bool(std::pair<int, iir::Stencil::FieldInfo> const&)>(
+                         [&](std::pair<int, iir::Stencil::FieldInfo> const& p) {
+                           return !p.second.IsTemporary &&
+                                  metadata.isAccessType(iir::FieldAccessType::FAT_Field, p.first);
+                         }));
+
+  for(const auto& field : nonTempFields) {
+    stencilRunMethod.addArg(stencilProperties->paramNameToType_.at(field.second.Name) + " " +
+                            field.second.Name + "_ds");
+  }
+
+  stencilRunMethod.startBody();
+
+  stencilRunMethod.addComment("starting timers");
+  stencilRunMethod.addStatement("start()");
 
   for(const auto& multiStagePtr : stencil.getChildren()) {
-    StencilRunMethod.addStatement("{");
+    stencilRunMethod.addStatement("{");
 
     const iir::MultiStage& multiStage = *multiStagePtr;
     bool solveKLoopInParallel_ = CodeGeneratorHelper::solveKLoopInParallel(multiStagePtr);
 
-    const auto fields = orderMap(multiStage.getFields());
+    const auto fields = multiStage.getOrderedFields();
 
-    auto nonTempFields =
-        makeRange(fields, std::function<bool(std::pair<int, iir::Field> const&)>([&](
-                              std::pair<int, iir::Field> const& p) {
-                    return !metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary,
-                                                  p.second.getAccessID());
-                  }));
+    auto msNonTempFields = makeRange(fields, std::function<bool(std::pair<int, iir::Field> const&)>(
+                                                 [&](std::pair<int, iir::Field> const& p) {
+                                                   return !metadata.isAccessType(
+                                                       iir::FieldAccessType::FAT_StencilTemporary,
+                                                       p.second.getAccessID());
+                                                 }));
 
     auto tempStencilFieldsNonLocalCached = makeRange(
-        fields, std::function<bool(std::pair<int, iir::Field> const&)>([&](
-                    std::pair<int, iir::Field> const& p) {
-          const int accessID = p.first;
-          if(!metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary,
-                                    p.second.getAccessID()))
-            return false;
-          for(const auto& ms : iterateIIROver<iir::MultiStage>(stencil)) {
-            if(!ms->isCached(accessID))
-              continue;
-            if(ms->getCache(accessID).getCacheIOPolicy() == iir::Cache::CacheIOPolicy::local)
-              return false;
-          }
+        fields,
+        std::function<bool(std::pair<int, iir::Field> const&)>(
+            [&](std::pair<int, iir::Field> const& p) {
+              const int accessID = p.first;
+              if(!metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary,
+                                        p.second.getAccessID()))
+                return false;
+              for(const auto& ms : iterateIIROver<iir::MultiStage>(stencil)) {
+                if(!ms->isCached(accessID))
+                  continue;
+                if(ms->getCache(accessID).getCacheIOPolicy() == iir::Cache::CacheIOPolicy::local)
+                  return false;
+              }
 
-          return true;
-        }));
+              return true;
+            }));
 
     // create all the data views
-    for(auto fieldIt : nonTempFields) {
+    for(const auto& fieldPair : msNonTempFields) {
       // TODO have the same FieldInfo in ms level so that we dont need to query
       // stencilInstantiation
       // all the time for name and IsTmpField
-      const auto fieldName = metadata.getFieldNameFromAccessID((*fieldIt).second.getAccessID());
-      StencilRunMethod.addStatement(c_gt() + "data_view<" + paramNameToType.at(fieldName) + "> " +
-                                    fieldName + "= " + c_gt() + "make_device_view(m_" + fieldName +
-                                    ")");
+      const auto fieldName = metadata.getFieldNameFromAccessID(fieldPair.second.getAccessID());
+      stencilRunMethod.addStatement(c_gt() + "data_view<" + paramNameToType.at(fieldName) + "> " +
+                                    fieldName + "= " + c_gt() + "make_device_view(" + fieldName +
+                                    "_ds)");
     }
-    for(auto fieldIt : tempStencilFieldsNonLocalCached) {
-      const auto fieldName = metadata.getFieldNameFromAccessID((*fieldIt).second.getAccessID());
+    for(const auto& fieldPair : tempStencilFieldsNonLocalCached) {
+      const auto fieldName = metadata.getFieldNameFromAccessID(fieldPair.second.getAccessID());
 
-      StencilRunMethod.addStatement(c_gt() + "data_view<tmp_storage_t> " + fieldName + "= " +
-                                    c_gt() + "make_device_view(m_" + fieldName + ")");
+      stencilRunMethod.addStatement(c_gt() + "data_view<tmp_storage_t> " + fieldName + "= " +
+                                    c_gt() + "make_device_view( m_" + fieldName + ")");
     }
 
-    DAWN_ASSERT(nonTempFields.size() > 0);
+    DAWN_ASSERT(msNonTempFields.size() > 0);
 
     iir::Extents maxExtents{0, 0, 0, 0, 0, 0};
     for(const auto& stage : iterateIIROver<iir::Stage>(*multiStagePtr)) {
       maxExtents.merge(stage->getExtents());
     }
 
-    StencilRunMethod.addStatement(
+    stencilRunMethod.addStatement(
         "const unsigned int nx = m_dom.isize() - m_dom.iminus() - m_dom.iplus()");
-    StencilRunMethod.addStatement(
+    stencilRunMethod.addStatement(
         "const unsigned int ny = m_dom.jsize() - m_dom.jminus() - m_dom.jplus()");
-    StencilRunMethod.addStatement(
+    stencilRunMethod.addStatement(
         "const unsigned int nz = m_dom.ksize() - m_dom.kminus() - m_dom.kplus()");
 
     StencilRunMethod.addStatement("assert(std::abs(m_dom.iminus()) == 3)");
@@ -539,25 +517,25 @@ void CudaCodeGen::generateStencilRunMethod(
     unsigned int ntx = blockSize[0];
     unsigned int nty = blockSize[1];
 
-    StencilRunMethod.addStatement(
+    stencilRunMethod.addStatement(
         "dim3 threads(" + std::to_string(ntx) + "," + std::to_string(nty) + "+" +
         std::to_string(maxExtents[1].Plus - maxExtents[1].Minus +
                        (maxExtents[0].Minus < 0 ? 1 : 0) + (maxExtents[0].Plus > 0 ? 1 : 0)) +
         ",1)");
 
     // number of blocks required
-    StencilRunMethod.addStatement("const unsigned int nbx = (nx + " + std::to_string(ntx) +
+    stencilRunMethod.addStatement("const unsigned int nbx = (nx + " + std::to_string(ntx) +
                                   " - 1) / " + std::to_string(ntx));
-    StencilRunMethod.addStatement("const unsigned int nby = (ny + " + std::to_string(nty) +
+    stencilRunMethod.addStatement("const unsigned int nby = (ny + " + std::to_string(nty) +
                                   " - 1) / " + std::to_string(nty));
     if(solveKLoopInParallel_) {
-      StencilRunMethod.addStatement("const unsigned int nbz = (m_dom.ksize()+" +
+      stencilRunMethod.addStatement("const unsigned int nbz = (m_dom.ksize()+" +
                                     std::to_string(blockSize[2]) + "-1) / " +
                                     std::to_string(blockSize[2]));
     } else {
-      StencilRunMethod.addStatement("const unsigned int nbz = 1");
+      stencilRunMethod.addStatement("const unsigned int nbz = 1");
     }
-    StencilRunMethod.addStatement("dim3 blocks(nbx, nby, nbz)");
+    stencilRunMethod.addStatement("dim3 blocks(nbx, nby, nbz)");
     std::string kernelCall =
         CodeGeneratorHelper::buildCudaKernelName(stencilInstantiation, multiStagePtr) +
         "<<<blocks, threads>>>(m_table,";
@@ -567,64 +545,65 @@ void CudaCodeGen::generateStencilRunMethod(
     }
 
     auto tempMSFieldsNonLocalCached = makeRange(
-        fields, std::function<bool(std::pair<int, iir::Field> const&)>([&](
-                    std::pair<int, iir::Field> const& p) {
-          const int accessID = p.first;
-          if(!metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary,
-                                    p.second.getAccessID()))
-            return false;
-          if(!multiStage.isCached(accessID))
-            return true;
-          if(multiStage.getCache(accessID).getCacheIOPolicy() == iir::Cache::CacheIOPolicy::local)
-            return false;
+        fields, std::function<bool(std::pair<int, iir::Field> const&)>(
+                    [&](std::pair<int, iir::Field> const& p) {
+                      const int accessID = p.first;
+                      if(!metadata.isAccessType(iir::FieldAccessType::FAT_StencilTemporary,
+                                                p.second.getAccessID()))
+                        return false;
+                      if(!multiStage.isCached(accessID))
+                        return true;
+                      if(multiStage.getCache(accessID).getCacheIOPolicy() ==
+                         iir::Cache::CacheIOPolicy::local)
+                        return false;
 
-          return true;
-        }));
+                      return true;
+                    }));
 
     // TODO enable const auto& below and/or enable use RangeToString
     std::string args;
     int idx = 0;
-    for(auto field : nonTempFields) {
-      const auto fieldName = metadata.getFieldNameFromAccessID((*field).second.getAccessID());
+    for(const auto& fieldPair : msNonTempFields) {
+      const auto fieldName = metadata.getFieldNameFromAccessID(fieldPair.second.getAccessID());
 
-      args = args + (idx == 0 ? "" : ",") + "(" + fieldName + ".data()+" + "m_" + fieldName +
-             ".get_storage_info_ptr()->index(" + fieldName + ".begin<0>(), " + fieldName +
+      args = args + (idx == 0 ? "" : ",") + "(" + fieldName + ".data()+" + fieldName +
+             "_ds.get_storage_info_ptr()->index(" + fieldName + ".begin<0>(), " + fieldName +
              ".begin<1>(),0 ))";
       ++idx;
     }
-    DAWN_ASSERT(nonTempFields.size() > 0);
-    for(auto field : tempMSFieldsNonLocalCached) {
+    DAWN_ASSERT(msNonTempFields.size() > 0);
+    for(const auto& fieldPair : tempMSFieldsNonLocalCached) {
       // in some cases (where there are no horizontal extents) we dont use the special tmp index
       // iterator, but rather a normal 3d field index iterator. In that case we pass temporaries in
       // the same manner as normal fields
       if(!CodeGeneratorHelper::useTemporaries(multiStagePtr->getParent(), metadata)) {
-        const auto fieldName = metadata.getFieldNameFromAccessID((*field).second.getAccessID());
+        const auto fieldName = metadata.getFieldNameFromAccessID(fieldPair.second.getAccessID());
 
-        args = args + ", (" + fieldName + ".data()+" + "m_" + fieldName +
+        args = args + ", (" + fieldName + ".data()+ m_" + fieldName +
                ".get_storage_info_ptr()->index(" + fieldName + ".begin<0>(), " + fieldName +
                ".begin<1>()," + fieldName + ".begin<2>()," + fieldName + ".begin<3>(), 0))";
       } else {
-        args = args + "," + metadata.getFieldNameFromAccessID((*field).second.getAccessID());
+        args = args + "," + metadata.getFieldNameFromAccessID(fieldPair.second.getAccessID());
       }
     }
 
     std::vector<std::string> strides = CodeGeneratorHelper::generateStrideArguments(
-        nonTempFields, tempMSFieldsNonLocalCached, stencilInstantiation, multiStagePtr,
+        msNonTempFields, tempMSFieldsNonLocalCached, stencilInstantiation, multiStagePtr,
         CodeGeneratorHelper::FunctionArgType::FT_Caller);
 
     DAWN_ASSERT(!strides.empty());
 
     kernelCall = kernelCall + "nx,ny,nz," + RangeToString(",", "", "")(strides) + "," + args + ")";
 
-    StencilRunMethod.addStatement(kernelCall);
+    stencilRunMethod.addStatement(kernelCall);
 
-    StencilRunMethod.addStatement("}");
+    stencilRunMethod.addStatement("}");
   }
 
-  StencilRunMethod.addComment("stopping timers");
-  StencilRunMethod.addStatement("pause()");
+  stencilRunMethod.addComment("stopping timers");
+  stencilRunMethod.addStatement("pause()");
 
-  StencilRunMethod.commit();
+  stencilRunMethod.commit();
 }
 
 void CudaCodeGen::addTempStorageTypedef(Structure& stencilClass,
@@ -659,8 +638,8 @@ void CudaCodeGen::addTmpStorageInit(
                 ", (dom_.jsize()+ " + std::to_string(blockSize[1]) + " - 1) / " +
                 std::to_string(blockSize[1]) + ", dom_.ksize() + 2 * " +
                 std::to_string(getVerticalTmpHaloSize(stencil)) + ")");
-    for(auto fieldIt : tempFields) {
-      ctr.addInit("m_" + (*fieldIt).second.Name + "(" + tmpMetadataName_ + ")");
+    for(const auto& fieldPair : tempFields) {
+      ctr.addInit("m_" + fieldPair.second.Name + "(" + tmpMetadataName_ + ")");
     }
   }
 }
@@ -670,15 +649,11 @@ std::unique_ptr<TranslationUnit> CudaCodeGen::generateCode() {
 
   // Generate code for StencilInstantiations
   std::map<std::string, std::string> stencils;
-  for(const auto& nameStencilCtxPair : context_->getStencilInstantiationMap()) {
+  for(const auto& nameStencilCtxPair : context_) {
     std::shared_ptr<iir::StencilInstantiation> origSI = nameStencilCtxPair.second;
     // TODO the clone seems to be broken
     //    std::shared_ptr<iir::StencilInstantiation> stencilInstantiation = origSI->clone();
     std::shared_ptr<iir::StencilInstantiation> stencilInstantiation = origSI;
-
-    PassInlining inliner(true, PassInlining::InlineStrategyKind::IK_ComputationsOnTheFly);
-
-    inliner.run(stencilInstantiation);
 
     std::string code = generateStencilInstantiation(stencilInstantiation);
     if(code.empty())
@@ -686,7 +661,7 @@ std::unique_ptr<TranslationUnit> CudaCodeGen::generateCode() {
     stencils.emplace(nameStencilCtxPair.first, std::move(code));
   }
 
-  std::string globals = generateGlobals(context_->getSIR(), "cuda");
+  std::string globals = generateGlobals(context_, "dawn_generated", "cuda");
 
   std::vector<std::string> ppDefines;
   auto makeDefine = [](std::string define, int value) {
@@ -702,7 +677,7 @@ std::unique_ptr<TranslationUnit> CudaCodeGen::generateCode() {
   // different TU's is completed, this is no longer necessary.
   // [https://github.com/MeteoSwiss-APN/gtclang/issues/32]
   //==============------------------------------------------------------------------------------===
-  CodeGen::addMplIfdefs(ppDefines, 30, context_->getOptions().MaxHaloPoints);
+  CodeGen::addMplIfdefs(ppDefines, 30);
 
   ppDefines.push_back("#include \"atlas/mesh/Connectivity.h\"\n");
 
@@ -726,9 +701,10 @@ std::unique_ptr<TranslationUnit> CudaCodeGen::generateCode() {
 
   DAWN_LOG(INFO) << "Done generating code";
 
+  std::string filename = generateFileName(context_);
   // TODO missing the BC
-  return make_unique<TranslationUnit>(context_->getSIR()->Filename, std::move(ppDefines),
-                                      std::move(stencils), std::move(globals));
+  return make_unique<TranslationUnit>(filename, std::move(ppDefines), std::move(stencils),
+                                      std::move(globals));
 }
 
 } // namespace cuda
