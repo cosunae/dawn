@@ -507,10 +507,10 @@ void CudaCodeGen::generateStencilRunMethod(
     stencilRunMethod.addStatement(
         "const unsigned int nz = m_dom.ksize() - m_dom.kminus() - m_dom.kplus()");
 
-    StencilRunMethod.addStatement("assert(std::abs(m_dom.iminus()) == 3)");
-    StencilRunMethod.addStatement("assert(std::abs(m_dom.iplus()) == 3)");
-    StencilRunMethod.addStatement("assert(std::abs(m_dom.jminus()) == 3)");
-    StencilRunMethod.addStatement("assert(std::abs(m_dom.jplus()) == 3)");
+    stencilRunMethod.addStatement("assert(std::abs(m_dom.iminus()) == 3)");
+    stencilRunMethod.addStatement("assert(std::abs(m_dom.iplus()) == 3)");
+    stencilRunMethod.addStatement("assert(std::abs(m_dom.jminus()) == 3)");
+    stencilRunMethod.addStatement("assert(std::abs(m_dom.jplus()) == 3)");
 
     const auto blockSize = stencilInstantiation->getIIR()->getBlockSize();
 
