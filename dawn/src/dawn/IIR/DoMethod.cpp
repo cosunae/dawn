@@ -219,14 +219,8 @@ void DoMethod::updateLevel() {
         continue;
       }
 
-      if(metaData_.getIsUnstructuredFromAccessID(AccessID)) {
-        AccessUtils::recordWriteAccess(inputOutputFields, inputFields, outputFields, AccessID,
-                                       extents, getInterval(),
-                                       metaData_.getLocationTypeFromAccessID(AccessID));
-      } else {
-        AccessUtils::recordWriteAccess(inputOutputFields, inputFields, outputFields, AccessID,
-                                       extents, getInterval());
-      }
+      AccessUtils::recordWriteAccess(inputOutputFields, inputFields, outputFields, AccessID,
+                                     extents, getInterval(), metaData_);
     }
 
     for(const auto& accessPair : access->getReadAccesses()) {
@@ -238,14 +232,8 @@ void DoMethod::updateLevel() {
         continue;
       }
 
-      if(metaData_.getIsUnstructuredFromAccessID(AccessID)) {
-        AccessUtils::recordReadAccess(inputOutputFields, inputFields, outputFields, AccessID,
-                                      extents, getInterval(),
-                                      metaData_.getLocationTypeFromAccessID(AccessID));
-      } else {
-        AccessUtils::recordReadAccess(inputOutputFields, inputFields, outputFields, AccessID,
-                                      extents, getInterval());
-      }
+      AccessUtils::recordReadAccess(inputOutputFields, inputFields, outputFields, AccessID, extents,
+                                    getInterval(), metaData_);
     }
   }
 

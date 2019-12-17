@@ -860,11 +860,12 @@ void MSCodeGen::generateCudaKernelCode() {
     Array3i dims{-1, -1, -1};
     for(const auto& fieldInfo : ms_->getParent()->getFields()) {
       if(fieldInfo.second.field.getAccessID() == fieldPair.second.getAccessID()) {
-        auto const& cartDim =
-            sir::dimension_cast<sir::CartesianFieldDimension const&>(fieldInfo.second.Dimensions);
+        auto const& dimensions = fieldInfo.second.Dimensions;
+        auto const& cartDim = sir::dimension_cast<sir::CartesianFieldDimension const&>(
+            dimensions.getHorizontalFieldDimension());
         dims[0] = cartDim.I() == 1;
         dims[1] = cartDim.J() == 1;
-        dims[2] = cartDim.K() == 1;
+        dims[2] = dimensions.K() == 1;
         break;
       }
     }

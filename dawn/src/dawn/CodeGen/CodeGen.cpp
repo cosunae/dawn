@@ -268,13 +268,14 @@ void CodeGen::generateStencilWrapperSyncMethod(Class& stencilWrapperClass) const
   syncStoragesMethod.commit();
 }
 
-std::string CodeGen::getStorageType(const sir::FieldDimension& dimensions) {
+std::string CodeGen::getStorageType(const sir::FieldDimensions& dimensions) {
   auto const& structuredDimensions =
-      dawn::sir::dimension_cast<dawn::sir::CartesianFieldDimension const&>(dimensions);
+      dawn::sir::dimension_cast<dawn::sir::CartesianFieldDimension const&>(
+          dimensions.getHorizontalFieldDimension());
   std::string storageType = "storage_";
   storageType += structuredDimensions.I() ? "i" : "";
   storageType += structuredDimensions.J() ? "j" : "";
-  storageType += structuredDimensions.K() ? "k" : "";
+  storageType += dimensions.K() ? "k" : "";
   storageType += "_t";
   return storageType;
 }

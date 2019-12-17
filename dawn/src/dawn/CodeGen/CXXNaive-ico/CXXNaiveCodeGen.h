@@ -67,6 +67,8 @@ private:
   generateStencilWrapperRun(Class& stencilWrapperClass,
                             const std::shared_ptr<iir::StencilInstantiation> stencilInstantiation,
                             const CodeGenProperties& codeGenProperties) const;
+
+  static ast::LocationType getLocationType(const sir::FieldDimensions& dimensions);
 };
 } // namespace cxxnaiveico
 } // namespace codegen

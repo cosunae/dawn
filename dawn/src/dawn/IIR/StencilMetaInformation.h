@@ -155,8 +155,7 @@ public:
   void insertAccessOfType(FieldAccessType type, int AccessID, const std::string& name);
 
   int addField(FieldAccessType type, const std::string& name,
-               const sir::FieldDimensions& fieldDimensions,
-               std::vector<ast::LocationType> locationTypes = {ast::LocationType::Cells});
+               const sir::FieldDimensions& fieldDimensions);
 
   int addTmpField(FieldAccessType type, const std::string& basename,
                   const sir::FieldDimensions& fieldDimensions);
@@ -354,9 +353,7 @@ public:
     return StencilIDToStencilCallMap_;
   }
 
-  bool getIsUnstructuredFromAccessID(int AccessID) const;
-  std::vector<dawn::ast::LocationType> getLocationTypeFromAccessID(int ID) const;
-  void addAccessIDLocationPair(int ID, const std::vector<ast::LocationType>& locations);
+  //  bool getIsUnstructuredFromAccessID(int AccessID) const;
 
 private:
   //================================================================================================
@@ -369,9 +366,6 @@ private:
   /// "main stencil" we can get the AccessID by name. This is due the fact that fields of different
   /// stencil functions can share the same name.
   DoubleSidedMap<int, std::string> AccessIDToNameMap_;
-
-  /// Stores the location type for every field as a map to the AccessID
-  std::unordered_map<int, std::vector<ast::LocationType>> FieldAccessIDToLocationTypeMap_;
 
   /// Referenced stencil functions in this stencil (note that nested stencil functions are not
   /// stored here but rather in the respecticve `StencilFunctionInstantiation`)

@@ -148,6 +148,17 @@ void CXXNaiveIcoCodeGen::generateStencilWrapperRun(
 
   RunMethod.commit();
 }
+
+ast::LocationType CXXNaiveIcoCodeGen::getLocationType(const sir::FieldDimensions& dimensions) {
+  // TODO need to support sparse dimensions
+
+  DAWN_ASSERT(
+      sir::dimension_isa<sir::TriangularFieldDimension>(dimensions.getHorizontalFieldDimension()));
+  const auto& triangularDimensions = sir::dimension_cast<sir::TriangularFieldDimension const&>(
+      dimensions.getHorizontalFieldDimension());
+  return triangularDimensions.getDenseLocation();
+}
+
 void CXXNaiveIcoCodeGen::generateStencilWrapperCtr(
     Class& stencilWrapperClass,
     const std::shared_ptr<iir::StencilInstantiation> stencilInstantiation,
@@ -178,8 +189,10 @@ void CXXNaiveIcoCodeGen::generateStencilWrapperCtr(
     }
   };
   for(auto APIfieldID : APIFields) {
-    std::string typeString =
-        getLocationTypeString(metadata.getLocationTypeFromAccessID(APIfieldID));
+    // TODO need to support sparse dimensions
+    auto locationType = getLocationType(metadata.getFieldDimensions(APIfieldID));
+
+    std::string typeString = getLocationTypeString(locationType);
 
     StencilWrapperConstructor.addArg("dawn::" + typeString + "field_t<LibTag, double>& " +
                                      metadata.getNameFromAccessID(APIfieldID));
@@ -298,7 +311,7 @@ void CXXNaiveIcoCodeGen::generateStencilClasses(
                                          StencilContext::SC_Stencil);
 
     auto fieldInfoToDeclString = [](iir::Stencil::FieldInfo info) {
-      switch(info.field.getLocation()) {
+      switch(getLocationType(info.field.getFieldDimensions())) {
       case ast::LocationType::Cells:
         return std::string("dawn::cell_field_t<LibTag, double>");
       case ast::LocationType::Vertices:

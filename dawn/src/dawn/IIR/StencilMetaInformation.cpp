@@ -338,8 +338,7 @@ void StencilMetaInformation::addAccessIDNamePair(int accessID, const std::string
 }
 
 int StencilMetaInformation::addField(FieldAccessType type, const std::string& name,
-                                     const sir::FieldDimension& fieldDimensions,
-                                     std::vector<ast::LocationType> locationTypes) {
+                                     const sir::FieldDimensions& fieldDimensions) {
   int accessID = UIDGenerator::getInstance()->get();
   DAWN_ASSERT(isFieldType(type));
   insertAccessOfType(type, accessID, name);
@@ -347,13 +346,11 @@ int StencilMetaInformation::addField(FieldAccessType type, const std::string& na
   DAWN_ASSERT(!fieldIDToInitializedDimensionsMap_.count(accessID));
   fieldIDToInitializedDimensionsMap_.emplace(accessID, fieldDimensions);
 
-  addAccessIDLocationPair(accessID, locationTypes);
-
   return accessID;
 }
 
 int StencilMetaInformation::addTmpField(FieldAccessType type, const std::string& basename,
-                                        const sir::FieldDimension& fieldDimensions) {
+                                        const sir::FieldDimensions& fieldDimensions) {
   int accessID = UIDGenerator::getInstance()->get();
 
   std::string fname = InstantiationHelper::makeTemporaryFieldname(basename, accessID);
@@ -367,21 +364,9 @@ int StencilMetaInformation::addTmpField(FieldAccessType type, const std::string&
   return accessID;
 }
 
-bool StencilMetaInformation::getIsUnstructuredFromAccessID(int AccessID) const {
-  return FieldAccessIDToLocationTypeMap_.count(AccessID) != 0;
-}
-
-std::vector<ast::LocationType>
-StencilMetaInformation::getLocationTypeFromAccessID(int AccessID) const {
-  DAWN_ASSERT(getIsUnstructuredFromAccessID(AccessID));
-  return FieldAccessIDToLocationTypeMap_.at(AccessID);
-}
-
-void StencilMetaInformation::addAccessIDLocationPair(
-    int AccessID, const std::vector<ast::LocationType>& locations) {
-  DAWN_ASSERT(!FieldAccessIDToLocationTypeMap_.count(AccessID));
-  FieldAccessIDToLocationTypeMap_.emplace(AccessID, locations);
-}
+// bool StencilMetaInformation::getIsUnstructuredFromAccessID(int AccessID) const {
+//  return FieldAccessIDToLocationTypeMap_.count(AccessID) != 0;
+//}
 
 void StencilMetaInformation::removeAccessID(int AccessID) {
   AccessIDToNameMap_.directEraseKey(AccessID);
@@ -452,9 +437,10 @@ json::json StencilMetaInformation::jsonDump() const {
   json::json fieldsMapJson;
   for(const auto& pair : fieldIDToInitializedDimensionsMap_) {
     auto dims = pair.second;
-    auto const& dimsCart = sir::dimension_cast<const sir::CartesianFieldDimension&>(dims);
+    auto const& dimsCart = sir::dimension_cast<const sir::CartesianFieldDimension&>(
+        dims.getHorizontalFieldDimension());
     fieldsMapJson[std::to_string(pair.first)] =
-        format("[%i,%i,%i]", (int)dimsCart.I(), (int)dimsCart.J(), (int)dimsCart.K());
+        format("[%i,%i,%i]", (int)dimsCart.I(), (int)dimsCart.J(), (int)dims.K());
   }
   metaDataJson["FieldDims"] = fieldsMapJson;
 

@@ -48,8 +48,7 @@ private:
   Interval interval_; ///< Enclosing Interval from the iteration space
                       ///  from where the Field has been accessed
 
-  bool unstrucutred_;
-  std::vector<ast::LocationType> location_ = {ast::LocationType::Cells};
+  sir::FieldDimensions dimensions_;
 
 public:
   Field(Field&& f) = default;
@@ -58,16 +57,10 @@ public:
   Field& operator=(const Field&) = default;
 
   Field(int accessID, IntendKind intend, std::optional<Extents> const& readExtents,
-        std::optional<Extents> const& writeExtents, Interval const& interval)
-      : accessID_(accessID), intend_(intend), extents_(readExtents, writeExtents),
-        extentsRB_(readExtents, writeExtents), interval_(interval), unstrucutred_(false) {}
-
-  Field(int accessID, IntendKind intend, std::optional<Extents> const& readExtents,
         std::optional<Extents> const& writeExtents, Interval const& interval,
-        const std::vector<ast::LocationType>& location)
+        const sir::FieldDimensions& dimensions)
       : accessID_(accessID), intend_(intend), extents_(readExtents, writeExtents),
-        extentsRB_(readExtents, writeExtents), interval_(interval), unstrucutred_(true),
-        location_(location) {}
+        extentsRB_(readExtents, writeExtents), interval_(interval), dimensions_(dimensions) {}
 
   /// @name Operators
   /// @{
@@ -136,9 +129,7 @@ public:
   ///
   void extendInterval(Interval const& interval) { interval_.merge(interval); }
 
-  const std::vector<ast::LocationType>& getLocation() { return location_; }
-
-  bool isUnstructured() { return unstrucutred_; }
+  const sir::FieldDimensions& getFieldDimensions() { return dimensions_; }
 };
 
 /// @brief merges all the fields from sourceFields into destinationFields
