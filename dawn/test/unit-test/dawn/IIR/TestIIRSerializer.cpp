@@ -78,10 +78,10 @@ bool compareIIRs(iir::IIR* lhs, iir::IIR* rhs) {
           IIR_EARLY_EXIT((lhsDoMethod->getInterval() == rhsDoMethod->getInterval()));
 
           // checking each of the statements
-          for(int stmtidx = 0, stmtSize = lhsDoMethod->getAST().getStatements().size();
+          for(int stmtidx = 0, stmtSize = lhsDoMethod->getAST().getRoot()->getStatements().size();
               stmtidx < stmtSize; ++stmtidx) {
-            const auto& lhsStmt = lhsDoMethod->getAST().getStatements()[stmtidx];
-            const auto& rhsStmt = rhsDoMethod->getAST().getStatements()[stmtidx];
+            const auto& lhsStmt = lhsDoMethod->getAST().getRoot()->getStatements()[stmtidx];
+            const auto& rhsStmt = rhsDoMethod->getAST().getRoot()->getStatements()[stmtidx];
             // check the statement (and its data)
             IIR_EARLY_EXIT((lhsStmt->equals(rhsStmt.get())));
           }
@@ -295,7 +295,7 @@ TEST_F(IIRSerializerTest, IIRTests) {
   stmtAccesses.addReadExtent(42, extents);
   stmt->getData<iir::IIRStmtData>().CallerAccesses = std::make_optional(std::move(stmtAccesses));
 
-  IIRDoMethod->getAST().push_back(std::move(stmt));
+  IIRDoMethod->getAST().getRoot()->push_back(std::move(stmt));
   std::string varName = "foo";
   auto varDeclStmt = iir::makeVarDeclStmt(dawn::Type(BuiltinTypeID::Float), varName, 0, "=",
                                           std::vector<std::shared_ptr<iir::Expr>>{expr->clone()});
@@ -305,7 +305,7 @@ TEST_F(IIRSerializerTest, IIRTests) {
       std::make_optional(std::move(varDeclStmtAccesses));
   varDeclStmt->getData<iir::VarDeclStmtData>().AccessID = std::make_optional<int>(33);
 
-  IIRDoMethod->getAST().push_back(std::move(varDeclStmt));
+  IIRDoMethod->getAST().getRoot()->push_back(std::move(varDeclStmt));
 
   auto&& getNthChild = [](std::shared_ptr<iir::StencilInstantiation>& si,
                           int n) -> std::shared_ptr<iir::Stmt> {
@@ -314,7 +314,7 @@ TEST_F(IIRSerializerTest, IIRTests) {
     auto& ms = stencil->getChild(0);
     auto& stage = ms->getChild(0);
     auto& doMethod = stage->getChild(0);
-    return doMethod->getAST().getStatements()[n];
+    return doMethod->getAST().getRoot()->getStatements()[n];
   };
 
   deserialized = serializeAndDeserializeRef();

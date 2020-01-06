@@ -52,7 +52,7 @@ public:
     fieldIsUnused_ |= funCall->isFieldUnused(AccessID_);
 
     // Follow the AST of the stencil function, it maybe unused in a nested stencil function
-    funCall->getAST()->accept(*this);
+    funCall->getAST().accept(*this);
 
     // Visit arguments
     iir::ASTVisitorForwarding::visit(expr);

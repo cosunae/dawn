@@ -101,7 +101,6 @@ private:
   // except the vector<unique_ptr>
   std::shared_ptr<iir::StencilFunCallExpr> expr_;
   std::shared_ptr<sir::StencilFunction> function_;
-  std::shared_ptr<iir::AST> ast_;
 
   Interval interval_;
   bool hasReturn_;
@@ -219,8 +218,8 @@ public:
   const std::string& getName() const { return function_->Name; }
 
   /// @brief Get the AST of the stencil function
-  std::shared_ptr<iir::AST>& getAST() { return ast_; }
-  const std::shared_ptr<iir::AST>& getAST() const { return ast_; }
+  iir::AST& getAST() { return doMethod_->getAST(); }
+  const iir::AST& getAST() const { return doMethod_->getAST(); }
 
   /// @brief Evaluate the offset of the field access expression (this performs the lazy evaluation
   /// of the offsets)

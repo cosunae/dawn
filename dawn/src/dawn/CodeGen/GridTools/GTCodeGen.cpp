@@ -794,7 +794,7 @@ void GTCodeGen::generateStencilClasses(
           DoMethodCodeGen.startBody();
 
           stencilBodyCGVisitor.setIndent(DoMethodCodeGen.getIndent());
-          for(const auto& stmt : doMethod.getAST().getStatements()) {
+          for(const auto& stmt : doMethod.getAST().getRoot()->getStatements()) {
             stmt->accept(stencilBodyCGVisitor);
             DoMethodCodeGen << stencilBodyCGVisitor.getCodeAndResetStream();
           }

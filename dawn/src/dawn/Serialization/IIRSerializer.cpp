@@ -363,8 +363,8 @@ void IIRSerializer::serializeIIR(proto::iir::StencilInstantiation& target,
 
           auto protoStmt = protoDoMethod->mutable_ast();
           ProtoStmtBuilder builder(protoStmt, ast::StmtData::IIR_DATA_TYPE);
-          auto ptr = std::make_shared<ast::BlockStmt>(
-              domethod->getAST()); // TODO takes a copy to allow using shared_from_this()
+          auto ptr =
+              domethod->getAST().getRoot(); // TODO takes a copy to allow using shared_from_this()
           ptr->accept(builder);
         }
       }
@@ -665,10 +665,11 @@ void IIRSerializer::deserializeIIR(std::shared_ptr<iir::StencilInstantiation>& t
           auto& IIRDoMethod = (IIRStage)->getChild(doMethodPos++);
           IIRDoMethod->setID(protoDoMethod.domethodid());
 
-          auto ast = std::dynamic_pointer_cast<iir::BlockStmt>(
+          auto block = std::dynamic_pointer_cast<iir::BlockStmt>(
               makeStmt(protoDoMethod.ast(), ast::StmtData::IIR_DATA_TYPE));
-          DAWN_ASSERT(ast);
-          IIRDoMethod->setAST(std::move(*ast));
+          DAWN_ASSERT(block);
+          ast::AST ast(std::make_shared<iir::BlockStmt>(*block));
+          IIRDoMethod->setAST(std::move(ast));
         }
       }
     }

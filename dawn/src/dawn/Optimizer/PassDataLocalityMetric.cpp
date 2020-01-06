@@ -212,7 +212,7 @@ public:
 
   void visit(const std::shared_ptr<iir::StencilFunCallExpr>& expr) override {
     stencilFunCalls_.push(getStencilFunctionInstantiation(expr));
-    stencilFunCalls_.top()->getAST()->accept(*this);
+    stencilFunCalls_.top()->getAST().accept(*this);
     stencilFunCalls_.pop();
   }
 

@@ -82,12 +82,12 @@ void compareIIRstructures(iir::IIR* lhs, iir::IIR* rhs) {
           EXPECT_EQ(lhsDoMethod->getInterval(), rhsDoMethod->getInterval());
 
           // checking each of the statements
-          ASSERT_EQ(lhsDoMethod->getAST().getStatements().size(),
-                    rhsDoMethod->getAST().getStatements().size());
-          for(int stmtidx = 0, stmtSize = lhsDoMethod->getAST().getStatements().size();
+          ASSERT_EQ(lhsDoMethod->getAST().getRoot()->getStatements().size(),
+                    rhsDoMethod->getAST().getRoot()->getStatements().size());
+          for(int stmtidx = 0, stmtSize = lhsDoMethod->getAST().getRoot()->getStatements().size();
               stmtidx < stmtSize; ++stmtidx) {
-            const auto& lhsStmt = lhsDoMethod->getAST().getStatements()[stmtidx];
-            const auto& rhsStmt = rhsDoMethod->getAST().getStatements()[stmtidx];
+            const auto& lhsStmt = lhsDoMethod->getAST().getRoot()->getStatements()[stmtidx];
+            const auto& rhsStmt = rhsDoMethod->getAST().getRoot()->getStatements()[stmtidx];
             // check the statement (and its data)
             EXPECT_TRUE(lhsStmt->equals(rhsStmt.get()));
           }

@@ -35,7 +35,7 @@ void AccessToNameMapper::visit(const std::shared_ptr<iir::StencilFunCallExpr>& e
     auto* stencilFunctionInstantiation = metaData_.getStencilFunctionInstantiation(expr).get();
     curFunctionInstantiation_.push(stencilFunctionInstantiation);
   }
-  curFunctionInstantiation_.top()->getAST()->accept(*this);
+  curFunctionInstantiation_.top()->getAST().accept(*this);
 
   curFunctionInstantiation_.pop();
   iir::ASTVisitorForwarding::visit(expr);

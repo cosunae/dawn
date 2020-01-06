@@ -199,7 +199,7 @@ public:
     }
     std::shared_ptr<const StencilFunctionInstantiation> prevFunction_ = function_;
     function_ = stencilFun;
-    stencilFun->getAST()->accept(*this);
+    stencilFun->getAST().accept(*this);
     function_ = prevFunction_;
   }
 };
@@ -212,7 +212,7 @@ void Stage::updateGlobalVariablesInfo() {
 
   for(const auto& doMethodPtr : getChildren()) {
     const DoMethod& doMethod = *doMethodPtr;
-    for(const auto& stmt : doMethod.getAST().getStatements()) {
+    for(const auto& stmt : doMethod.getAST().getRoot()->getStatements()) {
       const auto& access = stmt->getData<IIRStmtData>().CallerAccesses;
       DAWN_ASSERT(access);
       for(const auto& accessPair : access->getWriteAccesses()) {
@@ -276,8 +276,9 @@ void Stage::appendDoMethod(DoMethodSmartPtr_t& from, DoMethodSmartPtr_t& to,
                   "DoMethods have incompatible intervals!");
 
   to->setDependencyGraph(dependencyGraph);
-  to->getAST().insert_back(std::make_move_iterator(from->getAST().getStatements().begin()),
-                           std::make_move_iterator(from->getAST().getStatements().end()));
+  to->getAST().getRoot()->insert_back(
+      std::make_move_iterator(from->getAST().getRoot()->getStatements().begin()),
+      std::make_move_iterator(from->getAST().getRoot()->getStatements().end()));
 }
 
 std::vector<std::unique_ptr<Stage>>
@@ -286,18 +287,18 @@ Stage::split(std::deque<int>& splitterIndices,
   DAWN_ASSERT_MSG(hasSingleDoMethod(), "Stage::split does not support multiple Do-Methods");
   const DoMethod& thisDoMethod = getSingleDoMethod();
 
-  DAWN_ASSERT(thisDoMethod.getAST().getStatements().size() >= 2);
+  DAWN_ASSERT(thisDoMethod.getAST().getRoot()->getStatements().size() >= 2);
   DAWN_ASSERT(!graphs || splitterIndices.size() == graphs->size() - 1);
 
   std::vector<std::unique_ptr<Stage>> newStages;
 
-  splitterIndices.push_back(thisDoMethod.getAST().getStatements().size() - 1);
-  auto prevSplitterIndex = thisDoMethod.getAST().getStatements().begin();
+  splitterIndices.push_back(thisDoMethod.getAST().getRoot()->getStatements().size() - 1);
+  auto prevSplitterIndex = thisDoMethod.getAST().getRoot()->getStatements().begin();
 
   // Create new stages
   for(std::size_t i = 0; i < splitterIndices.size(); ++i) {
     auto nextSplitterIndex =
-        std::next(thisDoMethod.getAST().getStatements().begin(), splitterIndices[i] + 1);
+        std::next(thisDoMethod.getAST().getRoot()->getStatements().begin(), splitterIndices[i] + 1);
 
     newStages.push_back(std::make_unique<Stage>(metaData_, UIDGenerator::getInstance()->get(),
                                                 thisDoMethod.getInterval()));
@@ -310,7 +311,7 @@ Stage::split(std::deque<int>& splitterIndices,
     }
 
     // The new stage contains the statements in the range [prevSplitterIndex , nextSplitterIndex)
-    doMethod.getAST().insert_back(prevSplitterIndex, nextSplitterIndex);
+    doMethod.getAST().getRoot()->insert_back(prevSplitterIndex, nextSplitterIndex);
 
     // Update the fields of the new doMethod
     doMethod.update(NodeUpdateType::level);

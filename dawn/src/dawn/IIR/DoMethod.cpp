@@ -66,12 +66,16 @@ DoMethod::DoMethod(Interval interval, const StencilMetaInformation& metaData)
     : interval_(interval), id_(IndexGenerator::Instance().getIndex()),
       metaData_(metaData), ast_{std::make_unique<iir::IIRStmtData>()} {}
 
+DoMethod::DoMethod(Interval interval, const StencilMetaInformation& metaData, iir::AST&& ast)
+    : interval_(interval), id_(IndexGenerator::Instance().getIndex()),
+      metaData_(metaData), ast_{ast} {}
+
 std::unique_ptr<DoMethod> DoMethod::clone() const {
   auto cloneMS = std::make_unique<DoMethod>(interval_, metaData_);
 
   cloneMS->setID(id_);
   cloneMS->derivedInfo_ = derivedInfo_.clone();
-  cloneMS->ast_ = iir::BlockStmt{ast_};
+  cloneMS->ast_ = ast_;
   return cloneMS;
 }
 
@@ -86,7 +90,7 @@ void DoMethod::setDependencyGraph(const std::shared_ptr<DependencyGraphAccesses>
 std::optional<Extents> DoMethod::computeMaximumExtents(const int accessID) const {
   std::optional<Extents> extents;
 
-  for(const auto& stmt : getAST().getStatements()) {
+  for(const auto& stmt : getAST().getRoot()->getStatements()) {
     auto extents_ = iir::computeMaximumExtents(*stmt, accessID);
     if(!extents_)
       continue;
@@ -172,7 +176,7 @@ json::json DoMethod::jsonDump(const StencilMetaInformation& metaData) const {
   node["Fields"] = fieldsJson;
 
   json::json stmtsJson;
-  for(const auto& stmt : getAST().getStatements()) {
+  for(const auto& stmt : getAST().getRoot()->getStatements()) {
     json::json stmtNode;
     stmtNode["stmt"] = ASTStringifier::toString(stmt, 0);
 
@@ -208,7 +212,7 @@ void DoMethod::updateLevel() {
   std::unordered_map<int, Field> inputFields;
   std::unordered_map<int, Field> outputFields;
 
-  for(const auto& stmt : getAST().getStatements()) {
+  for(const auto& stmt : getAST().getRoot()->getStatements()) {
     const auto& access = stmt->getData<iir::IIRStmtData>().CallerAccesses;
     DAWN_ASSERT(access);
 
@@ -252,7 +256,7 @@ void DoMethod::updateLevel() {
 
   // Compute the extents of each field by accumulating the extents of each access to field in the
   // stage
-  for(const auto& stmt : getAST().getStatements()) {
+  for(const auto& stmt : getAST().getRoot()->getStatements()) {
     const auto& access = stmt->getData<iir::IIRStmtData>().CallerAccesses;
 
     // first => AccessID, second => Extent
@@ -274,7 +278,7 @@ void DoMethod::updateLevel() {
   // Compute the extents of each field by accumulating the extents of each access to field in the
   // stage
   ReplaceNamesVisitor nameReplacer(metaData_);
-  for(const auto& stmt : getAST().getStatements()) {
+  for(const auto& stmt : getAST().getRoot()->getStatements()) {
     // Visitor to loop trough and fix name = access name
     stmt->accept(nameReplacer);
   }
@@ -300,7 +304,7 @@ public:
 };
 
 bool DoMethod::isEmptyOrNullStmt() const {
-  for(auto const& stmt : getAST().getStatements()) {
+  for(auto const& stmt : getAST().getRoot()->getStatements()) {
     const std::shared_ptr<iir::Stmt>& root = stmt;
     CheckNonNullStatementVisitor checker;
     root->accept(checker);

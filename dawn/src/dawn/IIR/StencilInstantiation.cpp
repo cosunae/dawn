@@ -268,7 +268,7 @@ void StencilInstantiation::dump() const {
           PrintDescLine<4> lline(Twine("Do_") + Twine(l) + " " +
                                  doMethod->getInterval().toString());
 
-          const auto& stmts = doMethod->getAST().getStatements();
+          const auto& stmts = doMethod->getAST().getRoot()->getStatements();
           for(std::size_t m = 0; m < stmts.size(); ++m) {
             std::cout << "\e[1m" << ast::ASTStringifier::toString(stmts[m], 5 * DAWN_PRINT_INDENT)
                       << "\e[0m";

@@ -61,9 +61,11 @@ createDoMethod(int assignmentID, int assigneeID,
   accesses.addReadExtent(assigneeID, iir::Extents{});
   assignmentStmt->getData<iir::IIRStmtData>().CallerAccesses = std::move(accesses);
 
-  auto doMethod = std::make_unique<iir::DoMethod>(interval, metadata);
+  iir::BlockStmt block(std::make_unique<iir::IIRStmtData>());
+  block.push_back(std::move(assignmentStmt));
+  iir::AST ast(std::make_shared<iir::BlockStmt>(std::move(block)));
+  auto doMethod = std::make_unique<iir::DoMethod>(interval, metadata, std::move(ast));
 
-  doMethod->getAST().push_back(std::move(assignmentStmt));
   doMethod->update(iir::NodeUpdateType::level);
 
   return doMethod;

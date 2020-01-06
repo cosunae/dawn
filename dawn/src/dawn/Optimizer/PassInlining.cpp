@@ -456,7 +456,7 @@ tryInlineStencilFunction(PassInlining::InlineStrategy strategy,
   if(!stencilFunc->hasReturn() || strategy == PassInlining::InlineStrategy::ComputationsOnTheFly) {
     auto inliner = std::make_shared<Inliner>(strategy, stencilFunc, oldStmt, newStmts,
                                              AccessIDOfCaller, stencilInstantiation);
-    stencilFunc->getAST()->accept(*inliner);
+    stencilFunc->getAST().accept(*inliner);
     return std::pair<bool, std::shared_ptr<Inliner>>(true, std::move(inliner));
   }
   return std::pair<bool, std::shared_ptr<Inliner>>(false, nullptr);
@@ -478,8 +478,8 @@ bool PassInlining::run(const std::shared_ptr<iir::StencilInstantiation>& stencil
   for(const auto& stagePtr : iterateIIROver<iir::Stage>(*(stencilInstantiation->getIIR()))) {
     iir::Stage& stage = *stagePtr;
     for(auto& doMethod : stage.getChildren()) {
-      for(auto stmtIt = doMethod->getAST().getStatements().begin();
-          stmtIt != doMethod->getAST().getStatements().end(); ++stmtIt) {
+      for(auto stmtIt = doMethod->getAST().getRoot()->getStatements().begin();
+          stmtIt != doMethod->getAST().getRoot()->getStatements().end(); ++stmtIt) {
         inliner.processStatement(stmtIt);
 
         if(inliner.inlineCandiatesFound()) {
@@ -487,13 +487,14 @@ bool PassInlining::run(const std::shared_ptr<iir::StencilInstantiation>& stencil
           // Compute the accesses of the new statements
           computeAccesses(stencilInstantiation.get(), newStmtList);
           // Erase the old stmt ...
-          stmtIt = doMethod->getAST().erase(stmtIt);
+          stmtIt = doMethod->getAST().getRoot()->erase(stmtIt);
 
           // ... and insert the new ones
           // newStmtList will be cleared at the next for iteration, so it is safe to move the
           // elements here
-          stmtIt = doMethod->getAST().insert(stmtIt, std::make_move_iterator(newStmtList.begin()),
-                                             std::make_move_iterator(newStmtList.end()));
+          stmtIt = doMethod->getAST().getRoot()->insert(
+              stmtIt, std::make_move_iterator(newStmtList.begin()),
+              std::make_move_iterator(newStmtList.end()));
 
           std::advance(stmtIt, newStmtList.size() - 1);
         }

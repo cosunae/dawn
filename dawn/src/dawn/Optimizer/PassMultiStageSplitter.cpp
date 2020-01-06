@@ -51,9 +51,10 @@ multiStageSplitterOptimized() {
     iir::Stage& stage = (**stageIt);
     iir::DoMethod& doMethod = stage.getSingleDoMethod();
 
+    const auto& rootBlockStmt = doMethod.getAST().getRoot();
     // Iterate statements backwards
-    for(int stmtIndex = doMethod.getAST().getStatements().size() - 1; stmtIndex >= 0; --stmtIndex) {
-      const auto& stmt = doMethod.getAST().getStatements()[stmtIndex];
+    for(int stmtIndex = rootBlockStmt->getStatements().size() - 1; stmtIndex >= 0; --stmtIndex) {
+      const auto& stmt = rootBlockStmt->getStatements()[stmtIndex];
       graph.insertStatement(stmt);
 
       // Check for read-before-write conflicts in the loop order and counter loop order.
@@ -69,7 +70,7 @@ multiStageSplitterOptimized() {
 
         if(options.ReportPassMultiStageSplit)
           std::cout << "\nPASS: " << PassName << ": " << StencilName << ": split:"
-                    << doMethod.getAST().getStatements()[stmtIndex]->getSourceLocation().Line
+                    << rootBlockStmt->getStatements()[stmtIndex]->getSourceLocation().Line
                     << " looporder:" << curLoopOrder << "\n";
 
         if(options.DumpSplitGraphs)
@@ -107,6 +108,7 @@ multiStageSplitterDebug() {
     DAWN_ASSERT_MSG(false, "Max-Cut for Multistages is not yet implemented");
     iir::Stage& stage = (**stageIt);
     iir::DoMethod& doMethod = stage.getSingleDoMethod();
+    const auto& rootBlockStmt = doMethod.getAST().getRoot();
 
     //==============================================================================================
     // Max-Cut dependency analysis missing
@@ -124,7 +126,7 @@ multiStageSplitterDebug() {
     // links to other statements are found.
     // Iterate statements backwards
     int openDependencies = 0;
-    for(int stmtIndex = doMethod.getAST().getStatements().size() - 2; stmtIndex >= 0; --stmtIndex) {
+    for(int stmtIndex = rootBlockStmt->getStatements().size() - 2; stmtIndex >= 0; --stmtIndex) {
       openDependencies += checkDependencies(*stageIt, stmtIndex);
       if(openDependencies == 0) {
         splitterIndices.emplace_front(
@@ -138,8 +140,8 @@ multiStageSplitterDebug() {
     // For example if we find a multistage with an offset read/write pattern (a = b * a[k-1]),
     // even though this statement is independent from all other statements, we still need to
     // ensure the proper loop order and cannot just assume parallel.
-    for(int stmtIndex = doMethod.getAST().getStatements().size() - 1; stmtIndex >= 0; --stmtIndex) {
-      const auto& stmt = doMethod.getAST().getStatements()[stmtIndex];
+    for(int stmtIndex = rootBlockStmt->getStatements().size() - 1; stmtIndex >= 0; --stmtIndex) {
+      const auto& stmt = rootBlockStmt->getStatements()[stmtIndex];
       graph.insertStatement(stmt);
 
       // Check for read-before-write conflicts in the loop order.

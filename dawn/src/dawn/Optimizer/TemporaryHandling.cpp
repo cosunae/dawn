@@ -38,10 +38,11 @@ void promoteLocalVariableToTemporaryField(iir::StencilInstantiation* instantiati
       lifetime);
 
   // Replace the the variable declaration with an assignment to the temporary field
-  iir::BlockStmt& blockStmt = stencil->getStage(lifetime.Begin.StagePos)
-                                  ->getChildren()
-                                  .at(lifetime.Begin.DoMethodIndex)
-                                  ->getAST();
+  iir::BlockStmt& blockStmt = *(stencil->getStage(lifetime.Begin.StagePos)
+                                    ->getChildren()
+                                    .at(lifetime.Begin.DoMethodIndex)
+                                    ->getAST()
+                                    .getRoot());
 
   const std::shared_ptr<iir::Stmt> oldStatement =
       blockStmt.getStatements()[lifetime.Begin.StatementIndex];
@@ -111,10 +112,11 @@ void demoteTemporaryFieldToLocalVariable(iir::StencilInstantiation* instantiatio
       lifetime);
 
   // Replace the first access to the field with a VarDeclStmt
-  iir::BlockStmt& blockStmt = stencil->getStage(lifetime.Begin.StagePos)
-                                  ->getChildren()
-                                  .at(lifetime.Begin.DoMethodIndex)
-                                  ->getAST();
+  iir::BlockStmt& blockStmt = *(stencil->getStage(lifetime.Begin.StagePos)
+                                    ->getChildren()
+                                    .at(lifetime.Begin.DoMethodIndex)
+                                    ->getAST()
+                                    .getRoot());
   const std::shared_ptr<iir::Stmt> oldStatement =
       blockStmt.getStatements()[lifetime.Begin.StatementIndex];
 

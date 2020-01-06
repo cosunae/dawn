@@ -128,8 +128,8 @@ public:
     auto ret = std::make_unique<iir::DoMethod>(iir::Interval(s, e), si_->getMetaData());
     ret->setID(si_->nextUID());
     [[maybe_unused]] int x[] = {
-        (DAWN_ASSERT(stmts), ret->getAST().push_back(std::move(stmts)), 0)...};
-    computeAccesses(si_.get(), ret->getAST().getStatements());
+        (DAWN_ASSERT(stmts), ret->getAST().getRoot()->push_back(std::move(stmts)), 0)...};
+    computeAccesses(si_.get(), ret->getAST().getRoot()->getStatements());
     ret->updateLevel();
     return ret;
   }
@@ -142,8 +142,8 @@ public:
                                                si_->getMetaData());
     ret->setID(si_->nextUID());
     [[maybe_unused]] int x[] = {
-        (DAWN_ASSERT(stmts), ret->getAST().push_back(std::move(stmts)), 0)...};
-    computeAccesses(si_.get(), ret->getAST().getStatements());
+        (DAWN_ASSERT(stmts), ret->getAST().getRoot()->push_back(std::move(stmts)), 0)...};
+    computeAccesses(si_.get(), ret->getAST().getRoot()->getStatements());
     ret->updateLevel();
     return ret;
   }

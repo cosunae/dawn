@@ -57,7 +57,7 @@ class DoMethod : public IIRNode<Stage, DoMethod, void> {
 
   const StencilMetaInformation& metaData_;
   DerivedInfo derivedInfo_;
-  iir::BlockStmt ast_;
+  iir::AST ast_;
 
 public:
   static constexpr const char* name = "DoMethod";
@@ -65,6 +65,7 @@ public:
   /// @name Constructors and Assignment
   /// @{
   DoMethod(Interval interval, const StencilMetaInformation& metaData);
+  DoMethod(Interval interval, const StencilMetaInformation& metaData, AST&& ast);
   DoMethod(DoMethod&&) = default;
   /// @}
 
@@ -131,9 +132,9 @@ public:
   /// therefore the method is empty
   inline virtual void updateFromChildren() override {}
 
-  void setAST(iir::BlockStmt&& ast) { ast_ = std::move(ast); }
-  iir::BlockStmt const& getAST() const { return ast_; }
-  iir::BlockStmt& getAST() { return ast_; }
+  void setAST(iir::AST&& ast) { ast_ = std::move(ast); }
+  iir::AST const& getAST() const { return ast_; }
+  iir::AST& getAST() { return ast_; }
 };
 
 } // namespace iir
@@ -142,8 +143,8 @@ template <typename RootNode>
 auto iterateIIROverStmt(const RootNode& root) {
   std::vector<std::shared_ptr<iir::Stmt>> allStmts;
   for(auto& doMethod : iterateIIROver<iir::DoMethod>(root)) {
-    std::copy(doMethod->getAST().getStatements().begin(), doMethod->getAST().getStatements().end(),
-              std::back_inserter(allStmts));
+    std::copy(doMethod->getAST().getRoot()->getStatements().begin(),
+              doMethod->getAST().getRoot()->getStatements().end(), std::back_inserter(allStmts));
   }
   return allStmts;
 }

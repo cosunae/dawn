@@ -403,14 +403,15 @@ public:
                                     doMethod, doMethod.getInterval(),
                                     scope_.top()->LocalFieldnameToAccessIDMap, nullptr);
     ast->accept(statementMapper);
-    DAWN_LOG(INFO) << "Inserted " << doMethod.getAST().getStatements().size() << " statements";
+    DAWN_LOG(INFO) << "Inserted " << doMethod.getAST().getRoot()->getStatements().size()
+                   << " statements";
 
     if(context_.getDiagnostics().hasErrors())
       return;
     // Here we compute the *actual* access of each statement and associate access to the AccessIDs
     // we set previously.
     DAWN_LOG(INFO) << "Filling accesses ...";
-    computeAccesses(instantiation_.get(), doMethod.getAST().getStatements());
+    computeAccesses(instantiation_.get(), doMethod.getAST().getRoot()->getStatements());
 
     // Now, we compute the fields of each stage (this will give us the IO-Policy of the fields)
     stage->update(iir::NodeUpdateType::level);
