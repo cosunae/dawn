@@ -380,7 +380,7 @@ void StencilFunctionInstantiation::update() {
   std::unordered_map<int, Field> inputFields;
   std::unordered_map<int, Field> outputFields;
 
-  for(const auto& stmt : doMethod_->getAST().getStatements()) {
+  for(const auto& stmt : doMethod_->getAST().getRoot()->getStatements()) {
     const auto& access = stmt->getData<IIRStmtData>().CallerAccesses;
     DAWN_ASSERT(access);
 
